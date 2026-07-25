@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Callable
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from weasyprint import HTML
 
 from ..best_practices import BestPracticeCatalog
 from ..models.plan_session import PlanSession
@@ -40,8 +39,3 @@ def render_summary_html(session: PlanSession, catalog: BestPracticeCatalog | Non
     """
     template = _env.get_template("summary.html.jinja")
     return template.render(session=session, touchpoint_name=_touchpoint_name_resolver(catalog))
-
-
-def render_summary_pdf(session: PlanSession, catalog: BestPracticeCatalog | None = None) -> bytes:
-    html = render_summary_html(session, catalog)
-    return HTML(string=html).write_pdf()

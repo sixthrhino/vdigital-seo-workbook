@@ -59,7 +59,7 @@ deploy_mcp() {
     --project "${PROJECT}" \
     --no-allow-unauthenticated \
     --session-affinity \
-    --set-env-vars "SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION}" \
+    --set-env-vars "SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_REPORTS_BUCKET=${REPORTS_BUCKET}" \
     --memory 512Mi \
     --timeout 300
 
@@ -189,18 +189,27 @@ setup_project() {
     --condition=None \
     --quiet
 
-  # Not wired up to any code path yet — render_session_pdf currently
-  # returns the PDF as inline base64, which is fine for the plain /run
-  # endpoint but too large for a Google Chat message once PDFs get past a
-  # page or two. This bucket is provisioned ahead of that follow-up (GCS
-  # upload + signed URL, matching the reports-bucket pattern from the
-  # vds-mcp-server precedent) rather than blocking this deploy on it.
-  echo "==> Creating reports bucket (for future PDF/report hosting): ${REPORTS_BUCKET}"
+  echo "==> Granting ${sa} permission to sign its own tokens (needed for render_session_report's signed URLs)..."
+  gcloud iam service-accounts add-iam-policy-binding "${sa}" \
+    --project "${PROJECT}" \
+    --member="serviceAccount:${sa}" \
+    --role="roles/iam.serviceAccountTokenCreator" \
+    --quiet
+
+  echo "==> Creating reports bucket: ${REPORTS_BUCKET}"
   gcloud storage buckets create "gs://${REPORTS_BUCKET}" \
     --project "${PROJECT}" \
     --location "${REGION}" \
     --uniform-bucket-level-access \
     || echo "Bucket already exists, skipping."
+  # Reports are NOT public — render_session_report returns a 7-day signed
+  # URL per report instead of relying on a bucket-wide public ACL.
+
+  echo "==> Granting ${sa} object admin on the reports bucket..."
+  gcloud storage buckets add-iam-policy-binding "gs://${REPORTS_BUCKET}" \
+    --member="serviceAccount:${sa}" \
+    --role="roles/storage.objectAdmin" \
+    --quiet
 }
 
 # ---------------------------------------------------------------------------

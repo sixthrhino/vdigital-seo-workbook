@@ -1,5 +1,3 @@
-import base64
-
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 import pytest
@@ -7,7 +5,7 @@ import pytest
 from seo_workbook_mcp.app import create_app
 
 from conftest import CSV_PATH
-from seo_workbook_common.config import Settings
+from seo_workbook_mcp.config import McpSettings
 
 
 async def _start_session_with_a_touchpoint(client, client_name="KYZ", month="2026-06"):
@@ -26,32 +24,74 @@ async def _start_session_with_a_touchpoint(client, client_name="KYZ", month="202
     return session_id
 
 
-async def test_render_session_pdf_returns_valid_pdf(mcp_app):
-    async with Client(mcp_app) as client:
+class _FakeBlob:
+    def __init__(self):
+        self.uploaded_content = None
+
+    def upload_from_string(self, content, content_type=None):
+        self.uploaded_content = content
+
+    def generate_signed_url(self, *, version, expiration, method):
+        return "https://storage.googleapis.com/fake-bucket/fake-report.html?signed=1"
+
+
+class _FakeBucket:
+    def __init__(self):
+        self.blobs: dict[str, _FakeBlob] = {}
+
+    def blob(self, blob_name):
+        blob = _FakeBlob()
+        self.blobs[blob_name] = blob
+        return blob
+
+
+class _FakeStorageClient:
+    def __init__(self):
+        self.bucket_instance = _FakeBucket()
+        self.requested_bucket_name = None
+
+    def bucket(self, bucket_name):
+        self.requested_bucket_name = bucket_name
+        return self.bucket_instance
+
+
+@pytest.fixture
+def mcp_app_with_fake_storage():
+    fake_client = _FakeStorageClient()
+    settings = McpSettings(best_practices_csv_path=str(CSV_PATH), reports_bucket="test-reports-bucket")
+    app = create_app(settings, storage_client_factory=lambda: fake_client)
+    return app, fake_client
+
+
+async def test_render_session_report_uploads_and_returns_signed_url(mcp_app_with_fake_storage):
+    app, fake_client = mcp_app_with_fake_storage
+    async with Client(app) as client:
         session_id = await _start_session_with_a_touchpoint(client)
-        result = await client.call_tool("render_session_pdf", {"session_id": session_id})
+        result = await client.call_tool("render_session_report", {"session_id": session_id})
 
-    assert result.data["filename"] == "KYZ-2026-06-seo-plan.pdf"
-    pdf_bytes = base64.b64decode(result.data["pdf_base64"])
-    assert pdf_bytes.startswith(b"%PDF")
+    assert result.data["filename"] == "KYZ-2026-06-seo-plan.html"
+    assert result.data["report_url"] == "https://storage.googleapis.com/fake-bucket/fake-report.html?signed=1"
+    assert fake_client.requested_bucket_name == "test-reports-bucket"
 
-
-async def test_render_session_pdf_uses_catalog_touchpoint_names(mcp_app):
-    async with Client(mcp_app) as client:
-        session_id = await _start_session_with_a_touchpoint(client)
-        result = await client.call_tool("render_session_pdf", {"session_id": session_id})
-
-    pdf_bytes = base64.b64decode(result.data["pdf_base64"])
-    # Title Tag is the catalog display name for touchpoint_id "title_tag" —
-    # can't grep PDF bytes directly, so just confirm the render didn't error
-    # and produced a plausible page count.
-    assert len(pdf_bytes) > 500
+    uploaded_html = fake_client.bucket_instance.blobs["KYZ-2026-06-seo-plan.html"].uploaded_content
+    assert "KYZ" in uploaded_html
+    assert "Title Tag" in uploaded_html  # resolved via catalog, not the raw touchpoint_id
 
 
-async def test_render_session_pdf_unknown_session_raises(mcp_app):
-    async with Client(mcp_app) as client:
+async def test_render_session_report_unknown_session_raises(mcp_app_with_fake_storage):
+    app, _ = mcp_app_with_fake_storage
+    async with Client(app) as client:
         with pytest.raises(ToolError):
-            await client.call_tool("render_session_pdf", {"session_id": "does-not-exist"})
+            await client.call_tool("render_session_report", {"session_id": "does-not-exist"})
+
+
+async def test_render_session_report_requires_reports_bucket_configured(mcp_app):
+    # mcp_app fixture has no reports_bucket set — should fail clearly rather
+    # than attempting a real GCS call.
+    async with Client(mcp_app) as client:
+        session_id = await _start_session_with_a_touchpoint(client)
+        with pytest.raises(ToolError, match="reports_bucket is not configured"):
+            await client.call_tool("render_session_report", {"session_id": session_id})
 
 
 class _FakeValues:
@@ -89,7 +129,7 @@ class _FakeSheetsService:
 @pytest.fixture
 def mcp_app_with_fake_sheets():
     fake_service = _FakeSheetsService()
-    settings = Settings(best_practices_csv_path=str(CSV_PATH))
+    settings = McpSettings(best_practices_csv_path=str(CSV_PATH))
     app = create_app(settings, sheets_client_factory=lambda: fake_service)
     return app, fake_service
 

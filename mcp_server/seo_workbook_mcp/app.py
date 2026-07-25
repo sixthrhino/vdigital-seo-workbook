@@ -6,10 +6,10 @@ from typing import Any, Callable
 
 from fastmcp import FastMCP
 from seo_workbook_common.best_practices import load_catalog
-from seo_workbook_common.config import Settings, get_settings
 from seo_workbook_common.logging import configure_logging
-from seo_workbook_common.output import build_sheets_service
+from seo_workbook_common.output import build_sheets_service, build_storage_client
 
+from .config import McpSettings, get_mcp_settings
 from .session_store import SessionStore
 from .tools import catalog_tools, output_tools, session_tools
 
@@ -31,10 +31,11 @@ def _resolve_csv_path(raw_path: str) -> Path:
 
 
 def create_app(
-    settings: Settings | None = None,
+    settings: McpSettings | None = None,
     sheets_client_factory: Callable[[], Any] = build_sheets_service,
+    storage_client_factory: Callable[[], Any] = build_storage_client,
 ) -> FastMCP:
-    settings = settings or get_settings()
+    settings = settings or get_mcp_settings()
     configure_logging(settings.log_level)
 
     mcp = FastMCP("seo-workbook-mcp")
@@ -43,7 +44,14 @@ def create_app(
 
     catalog_tools.register(mcp, catalog)
     session_tools.register(mcp, catalog, store)
-    output_tools.register(mcp, catalog, store, sheets_client_factory=sheets_client_factory)
+    output_tools.register(
+        mcp,
+        catalog,
+        store,
+        settings,
+        sheets_client_factory=sheets_client_factory,
+        storage_client_factory=storage_client_factory,
+    )
 
     return mcp
 

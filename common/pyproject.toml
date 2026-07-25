@@ -9,14 +9,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Only mcp_server actually renders PDFs / writes Sheets — kept as an extra
-# rather than a hard dependency so agent_service's image doesn't need
-# WeasyPrint's native Pango/Cairo libs just to import config/logging.
+# Only mcp_server actually renders reports / writes Sheets — kept as an
+# extra rather than a hard dependency so agent_service's image doesn't need
+# any of this just to import config/logging.
 output = [
     "jinja2>=3.1",
-    "weasyprint>=62",
     "google-api-python-client>=2.140",
     "google-auth>=2.30",
+    "google-cloud-storage>=2.10",
 ]
 dev = [
     "pytest>=8.0",

@@ -5,7 +5,7 @@ import pytest
 from seo_workbook_common.best_practices.loader import load_catalog
 from seo_workbook_common.keywords import parse_keyword_target
 from seo_workbook_common.models.plan_session import PlanSession, TouchpointAnswer, ValidationResult
-from seo_workbook_common.output.pdf_renderer import render_summary_html, render_summary_pdf
+from seo_workbook_common.output.report_renderer import render_summary_html
 
 CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "organic_qa_checklist.csv"
 
@@ -71,7 +71,9 @@ def test_render_summary_html_without_catalog_falls_back_to_touchpoint_id(sample_
     assert "title_tag" in html
 
 
-def test_render_summary_pdf_produces_valid_pdf_bytes(sample_session):
-    pdf_bytes = render_summary_pdf(sample_session)
-    assert pdf_bytes.startswith(b"%PDF")
-    assert len(pdf_bytes) > 500
+def test_render_summary_html_includes_print_media_rule(sample_session):
+    # Delivery is: open the report link in a browser, print to PDF from
+    # there — no server-side PDF generation — so the print stylesheet is
+    # part of the contract, not just cosmetic.
+    html = render_summary_html(sample_session)
+    assert "@media print" in html
