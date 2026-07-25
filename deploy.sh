@@ -47,19 +47,44 @@ deploy_mcp() {
     --substitutions="_IMAGE=${MCP_IMAGE}" \
     --project "${PROJECT}"
 
+  # finalize_session always persists to MongoDB (it's the system of record,
+  # not an optional export) — MONGO_URI is the full Atlas connection string
+  # (mongodb+srv://user:password@host/?...) with the real password already
+  # substituted; unlike RUN_API_KEY this can't be auto-generated, so it must
+  # be provided by the caller. Stored in Secret Manager, never passed as a
+  # plain env var or logged.
+  if [ -z "${MONGO_URI:-}" ]; then
+    echo "ERROR: MONGO_URI must be set, e.g.:"
+    echo "  export MONGO_URI='mongodb+srv://user:password@host/?appName=...'"
+    echo "  ./deploy.sh mcp"
+    exit 1
+  fi
+  if gcloud secrets describe seo-workbook-mongo-uri --project "${PROJECT}" &>/dev/null; then
+    echo -n "${MONGO_URI}" | gcloud secrets versions add seo-workbook-mongo-uri --project "${PROJECT}" --data-file=-
+  else
+    echo -n "${MONGO_URI}" | gcloud secrets create seo-workbook-mongo-uri --project "${PROJECT}" --data-file=- --replication-policy=automatic
+  fi
+
   echo "==> Deploying mcp-server to Cloud Run..."
   # --session-affinity: our in-memory SessionStore (in-progress PlanSessions,
   # see session_store.py) lives in the handling instance's memory, not
   # anything shared across instances — affinity keeps one conversation
   # pinned to one instance for its lifetime, same reasoning as the
   # vds-mcp-server precedent this is adapted from.
+  #
+  # NOTE: MongoDB Atlas's default Network Access list will reject Cloud
+  # Run's connections unless the project's outbound IPs are allowed — either
+  # allow 0.0.0.0/0 in Atlas (quick, less secure) or route egress through a
+  # Serverless VPC Connector + Cloud NAT with a static IP and allowlist that
+  # instead. Not set up by this script.
   gcloud run deploy seo-workbook-mcp-server \
     --image "${MCP_IMAGE}" \
     --region "${REGION}" \
     --project "${PROJECT}" \
     --no-allow-unauthenticated \
     --session-affinity \
-    --set-env-vars "SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_REPORTS_BUCKET=${REPORTS_BUCKET}" \
+    --set-env-vars "SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_REPORTS_BUCKET=${REPORTS_BUCKET},SEO_WORKBOOK_MONGO_DATABASE=${MONGO_DATABASE:-seo_workbook},SEO_WORKBOOK_MONGO_COLLECTION=${MONGO_COLLECTION:-plan_sessions}" \
+    --set-secrets "SEO_WORKBOOK_MONGO_URI=seo-workbook-mongo-uri:latest" \
     --memory 512Mi \
     --timeout 300
 

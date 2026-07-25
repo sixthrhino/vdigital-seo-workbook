@@ -34,6 +34,7 @@ def create_app(
     settings: McpSettings | None = None,
     sheets_client_factory: Callable[[], Any] = build_sheets_service,
     storage_client_factory: Callable[[], Any] = build_storage_client,
+    mongo_collection_factory: Callable[[], Any] | None = None,
 ) -> FastMCP:
     settings = settings or get_mcp_settings()
     configure_logging(settings.log_level)
@@ -43,7 +44,7 @@ def create_app(
     store = SessionStore()
 
     catalog_tools.register(mcp, catalog)
-    session_tools.register(mcp, catalog, store)
+    session_tools.register(mcp, catalog, store, settings, mongo_collection_factory=mongo_collection_factory)
     output_tools.register(
         mcp,
         catalog,

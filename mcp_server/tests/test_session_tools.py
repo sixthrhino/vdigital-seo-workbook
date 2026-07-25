@@ -2,6 +2,11 @@ from fastmcp import Client
 from fastmcp.exceptions import ToolError
 import pytest
 
+from seo_workbook_mcp.app import create_app
+
+from conftest import CSV_PATH
+from seo_workbook_mcp.config import McpSettings
+
 
 async def test_start_session_creates_draft_session(mcp_app):
     async with Client(mcp_app) as client:
@@ -203,7 +208,7 @@ async def test_finalize_session_requires_completion(mcp_app):
             await client.call_tool("finalize_session", {"session_id": session_id})
 
 
-async def test_finalize_session_succeeds_once_complete(mcp_app):
+async def test_finalize_session_succeeds_once_complete(mcp_app, fake_mongo_collection):
     async with Client(mcp_app) as client:
         session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
         session_id = session.data["session_id"]
@@ -220,3 +225,28 @@ async def test_finalize_session_succeeds_once_complete(mcp_app):
         result = await client.call_tool("finalize_session", {"session_id": session_id})
         assert result.data["status"] == "finalized"
         assert result.data["finalized_at"] is not None
+
+    # Persisted to Mongo (the fake collection) as the system of record.
+    saved = fake_mongo_collection.documents[session_id]
+    assert saved["status"] == "finalized"
+    assert saved["client"] == "KYZ"
+
+
+async def test_finalize_session_requires_mongo_configured():
+    settings = McpSettings(best_practices_csv_path=str(CSV_PATH))  # mongo_uri left empty
+    app = create_app(settings)
+    async with Client(app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+        await client.call_tool("add_page", {"session_id": session_id, "url": "https://kyz.com/a/"})
+        await client.call_tool(
+            "record_touchpoint",
+            {
+                "session_id": session_id,
+                "url": "https://kyz.com/a/",
+                "touchpoint_id": "title_tag",
+                "items": [{"new_value": "Good Title", "primary_keyword": "insurance"}],
+            },
+        )
+        with pytest.raises(ToolError, match="mongo_uri is not configured"):
+            await client.call_tool("finalize_session", {"session_id": session_id})

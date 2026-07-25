@@ -7,15 +7,17 @@ requires-python = ">=3.11"
 # install both with `pip install -e ../common -e .` (the Docker build does
 # the equivalent from a repo-root build context so it can COPY common/ in).
 # jinja2/google-api-python-client/google-auth/google-cloud-storage are
-# seo-workbook-common's `output` extra (its output/ package) — listed again
-# here directly since nothing resolves extras transitively across the
-# pythonpath seam described above; keep in sync with common/pyproject.toml.
+# seo-workbook-common's `output` extra, and pymongo is its `storage` extra
+# (its storage/ package) — listed again here directly since nothing resolves
+# extras transitively across the pythonpath seam described above; keep in
+# sync with common/pyproject.toml.
 dependencies = [
     "fastmcp>=3.0",
     "jinja2>=3.1",
     "google-api-python-client>=2.140",
     "google-auth>=2.30",
     "google-cloud-storage>=2.10",
+    "pymongo>=4.6",
 ]
 
 [project.optional-dependencies]

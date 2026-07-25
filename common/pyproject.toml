@@ -18,6 +18,11 @@ output = [
     "google-auth>=2.30",
     "google-cloud-storage>=2.10",
 ]
+# Only mcp_server persists sessions (MongoDB is the system of record for
+# finalized plans) — same reasoning as `output` above.
+storage = [
+    "pymongo>=4.6",
+]
 dev = [
     "pytest>=8.0",
 ]

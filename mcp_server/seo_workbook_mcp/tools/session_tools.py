@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Callable
 
 from fastmcp import FastMCP
 from seo_workbook_common.best_practices import BestPracticeCatalog
 from seo_workbook_common.best_practices.loader import slugify
 from seo_workbook_common.keywords import parse_keyword_target
 from seo_workbook_common.models.plan_session import PlanSession, SessionStatus, TouchpointAnswer
+from seo_workbook_common.storage import build_mongo_collection, save_session
 from seo_workbook_common.validators import validate_touchpoint
 
+from ..config import McpSettings
 from ..session_store import SessionStore
 
 
@@ -16,7 +19,18 @@ def _session_id(client: str, month: str) -> str:
     return f"{slugify(client)}-{month}"
 
 
-def register(mcp: FastMCP, catalog: BestPracticeCatalog, store: SessionStore) -> None:
+def register(
+    mcp: FastMCP,
+    catalog: BestPracticeCatalog,
+    store: SessionStore,
+    settings: McpSettings,
+    mongo_collection_factory: Callable[[], Any] | None = None,
+) -> None:
+    def _default_mongo_collection_factory() -> Any:
+        return build_mongo_collection(settings.mongo_uri, settings.mongo_database, settings.mongo_collection)
+
+    get_mongo_collection = mongo_collection_factory or _default_mongo_collection_factory
+
     @mcp.tool()
     def start_session(client: str, month: str, requested_by: str | None = None) -> dict:
         """Start a new monthly SEO plan session for one client.
@@ -116,14 +130,23 @@ def register(mcp: FastMCP, catalog: BestPracticeCatalog, store: SessionStore) ->
     @mcp.tool()
     def finalize_session(session_id: str) -> dict:
         """Mark a session finalized once every page has at least one
-        touchpoint and every touchpoint has passed validation. Raises with
-        the remaining open questions if the session isn't ready yet.
+        touchpoint and every touchpoint has passed validation, and persist
+        it to MongoDB as the system of record. Raises with the remaining
+        open questions if the session isn't ready yet, or a clear error if
+        MongoDB isn't configured — this always persists, it's not optional.
         """
         session = store.get(session_id)
         if not session.is_complete():
             open_questions = session.open_questions()
             raise ValueError("Session is not complete yet — resolve these first: " + "; ".join(open_questions))
+        if not settings.mongo_uri:
+            raise ValueError("mongo_uri is not configured (SEO_WORKBOOK_MONGO_URI)")
+
         session.status = SessionStatus.FINALIZED
         session.finalized_at = datetime.now(timezone.utc)
         store.save(session)
+
+        collection = get_mongo_collection()
+        save_session(collection, session)
+
         return session.model_dump(mode="json")
