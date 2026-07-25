@@ -1,0 +1,238 @@
+"Best Practices Doc:
+ General Best Practices - VDS Organic SEO",,,,,
+Category,Search Tactic,Optimization Touchpoint,What it is?,Expected Output (QA Guidelines),Implementation / Best Practice Notes
+Deep,SEO,Adding Original Photos/Videos,"Replacing stock imagery or text-only content with original, client-owned visual assets to strengthen E-E-A-T signals, improve engagement, and differentiate content for AI and search.","1.) Video titles are under 60 characters and include the primary keyword near the front
+2.) Descriptions prioritize keyword-rich content and essential links in the first 2-3 lines
+3.) Video chapters are implemented with accurate timestamps for improved navigability
+4.) Auto-captions are enabled and edited for accuracy to ensure crawlable content
+5.) VideoObject schema is correctly deployed on all website pages where videos are embedded","-Original visuals signal first-hand experience — a key E-E-A-T factor for Google and AI Overviews
+-Make sure the image is the client's original image and confirm with the CSM
+-If using a stock image, add the stock reference information
+-Always include descriptive alt text for accessibility and crawlability
+-Embed original videos on-page rather than linking out when possible
+-Add VideoObject or ImageObject schema where applicable"
+Technical Optimization,AIO,AI Crawler Directives for Robots.txt Files,"Rather than just using the catch-all *, we optimize the robots file to explicitly call out OpenAI, Claude, Perplexity, Google AI, Meta, Cohere, and other AI crawlers by name. This is intentional as it allows us to apply different rules to AI crawlers vs. regular search bots.","1.) Documentation should include record of old / new robots.txt files
+
+2.) New robots.txt file has not removed or altered existing rules
+
+3.) New robots.txt has exact same rules as the original file, applied to each individual AI crawler","- If you add new rules you should know exactly what they are going to do
+- Should (if possible) reference AI crawling bots (Ex: https://lemonlaws.com/robots.txt)
+
+LLMS / Robots Instructions"
+Deep,SEO,Canonical Tags,Adding / removing the canonical as needed to ensure the right pages are indexing,"1.) Canonical tag is present per ""SEO Meta 1-click"" or ""Ahrefs Toolbar"" extensions
+
+2.) Canonicals as a standard should match the page URL (i.e. self canonicalized) unless the page is a duplicate / close duplicate of another page (ex. /blog/page/2/ should canonicalize to /blog/)
+
+3.) If the canonical is intentionally placed, the page it canonicalizes to (what is declared in the canonical tag) should be the primary version of that content on the site.","- Make sure you only add canonicals when needed
+- Canonicalization should only be done to exact or very near duplicates"
+Deep,Integrated SEO/AIO,CTA (Call to Action),"Instruction to the audience designed to provoke an immediate response, typically a button, link, or clear phrase (e.g., ""Get a Quote,"" ""Contact Us""). ","1.) Video titles are under 60 characters and include the primary keyword near the front
+2.) Descriptions prioritize keyword-rich content and essential links in the first 2-3 lines
+3.) Video chapters are implemented with accurate timestamps for improved navigability
+4.) Auto-captions are enabled and edited for accuracy to ensure crawlable content
+5.) VideoObject schema is correctly deployed on all website pages where videos are embedded","- Don't make them super long, these should be short and easily digestible
+- Use clear, action-oriented language, Instead of ""Click Here"" use ""Get Your Instant Quote""
+- CTAs should be placed throughout the page, without being overly intrusive or in your face"
+Deep,Integrated SEO/AIO,Embedding Google Maps,Adding a google map iframe to the page or footer. ,"1.) Confirm the iframe uses the verified Google Business Profile (GBP) link rather than a generic address
+2.) Ensure the map is custom-sized for seamless integration within the page or footer layout
+3.) Verify the live site deployment to ensure the map loads correctly and accurately identifies the business location","- Always use the actual GBP profile, not just the address of the business on Google Maps
+- Should be custom sized and QA'd on the live site to ensure proper deployment"
+Deep,Integrated SEO/AIO,Embedding YouTube Videos On-site,"The process of embedding and connecting a client's YouTube video content directly on their website to strengthen on-page engagement signals, support E-E-A-T, and increase visibility in Google's video results.","1.) Video is embedded on a relevant service, blog, or location page using standard YouTube embed code
+2.) VideoObject schema (JSON-LD) is correctly implemented on the page
+3.) Page includes a keyword-informed title, description, and transcript for accessibility and crawlability
+4.) Embedded video loads and functions correctly on mobile devices","-Embed videos on relevant service, blog, or location pages — not just a standalone video page
+-Use the standard YouTube embed code; avoid third-party players that may block indexing
+-Add VideoObject schema (JSON-LD) to every page with an embedded video
+-Include a keyword-informed video title, description, and transcript on the page when possible
+-Transcripts add crawlable text content and improve accessibility
+-Confirm the embedded video loads correctly on mobile
+-Monitor video performance in GSC under the Video index report
+-Cross-reference with YouTube Studio analytics to track referral traffic back to the site"
+Deep,Integrated SEO/AIO,External Linking,Hyperlink to an outside website from the page you are optimizing,"1.) External links do not lead to Wikipedia, forums, or competitor websites.
+2.) Linked sites are authoritative and directly enhance the trustworthiness of the content.
+3.) All external links are set to open in a new tab.
+4.) Rel=""nofollow"" is applied to any external links that do not contribute to the site's E-E-A-T profile.","- DO NOT link to wikipedia or any forums
+- DO NOT link to competitor websites
+- ONLY link to sites that enhance the trustworthiness of your site by relation
+- ALWAYS set external links to open in a new tab
+- Set existing external links to nofollow if they don't enhance your EEAT profile"
+Deep,Integrated SEO/AIO,Geo Keywords,"Specific phrases that signal the geographic location a site or page offers services/products in (e.g., ""pizza delivery Denver"")","1.) Confirm geo keywords are relevant and applicable to the specific page or site content.
+2.) Verify geographic identifiers include specific locations such as city, county, state, or neighborhood.
+3.) Ensure ""near me"" is not used as a primary geo keyword.
+4.) Check that geo keywords accurately signal the specific location where services or products are offered.","- Not every page / site has geo keywords, know when they are applicable
+- Geo keywords can be a city, county, state, or even a neighborhood
+- ""near me"" is Not a geo keyword"
+Core,Integrated SEO/AIO,H1 Tag,"HTML heading element <h1> used for the main heading on a web page, typically the most prominent text.","1.) H1 tag is consistent with other H1 tags on similar page types
+
+2.) H1 tag did not change other elements (i.e. Nav / Title tag)","- Stay under 70 characters
+- Include the primary target keyword (and geo if applicable)"
+Deep,Integrated SEO/AIO,H2 / H3 / H4 tags,"HTML heading elements <h2>, <h3>, and <h4> that create hierarchical subheadings within your content, breaking it into logical sections. ","1.) Headings follow a logical numerical hierarchy without skipping levels to ensure a clear informational hierarchy.
+2.) Subheadings naturally incorporate supporting, LSI, and geographic keywords to reinforce targeting.
+3.) Content is logically broken into sections by tags to improve scannability and user experience.
+4.) Heading text accurately describes the following section for both users and search engines.","- Reinforce Keyword Targeting (Supporting, LSIs, Geos)
+- Clear UI / UX for users and search engines — show informational hierarchy"
+Deep,SEO,HTML Sitemap ,"A user-facing page on the website that lists all important URLs in a structured, linked format — distinct from the XML sitemap, which is for search engines only.","1.) HTML sitemap should live at /sitemap or /html-sitemap
+
+2.) HTML sitemap should include relevant / helpful titles for each link
+
+3.) HTML sitemap should match the XML sitemap (assuming the XML sitemap is properly configured)","-Build as a crawlable HTML page (not generated via JavaScript) so bots can follow the links
+-Organize URLs by category/section (e.g. Services, Blog, Locations)
+-Link from the footer for consistent sitewide crawl access
+-Prioritize pages that may be harder for bots to discover through normal navigation
+-Do not include noindexed, redirected, or low-value pages
+-QA required: export the list of URLs from Ahrefs crawl, verify no broken or redirect links are listed
+-Update any time significant site structure changes occur"
+Deep,Integrated SEO/AIO,Image Alt Text,HTML attribute alt used to provide a text description of an image on a web page. ,"1.) Alt text accurately and concisely describes the specific visual content of the image.
+2.) Descriptions utilize detailed context rather than generic, one-word terms.
+3.) Relevant keywords are integrated naturally where they align with the image subject.
+4.) Every meaningful image on the page includes a functional alt attribute to support accessibility and crawlability.","- Describe the image content accurately and concisely. Focus on what is actually in the image.
+- Instead of alt=""dog"", consider alt=""Golden Retriever puppy playing with a red ball""
+- If applicable and natural, incorporate relevant keywords that relate to the image"
+Tech,Integrated SEO/AIO,Indexation Audits,Submitting pages to Google/Bing for indexing,"1.) Sitemaps in Google Search Console have been reviewed to identify all non-indexed pages.
+2.) All target non-indexed pages have been verified as legitimate and functional via a live render test.
+3.) Indexing has been manually requested for all validated, high-priority pages.
+4.) The sitemap itself has been confirmed as submitted and successfully processed by the search engine.","- Click Path:
+   sitemaps > select the sitemap > ""see page indexing"" > look for non-indexed pages > verify the page is legit (live render) > submit the page > request indexing"
+Tech,Integrated SEO/AIO,Internal Link Cleanup,Updating existing internal links that are set to a URL that is being redirected,"1.) All internal links previously pointing to redirects have been updated to link directly to the final destination URL.
+2.) A follow-up crawl or manual check confirms the updated links return a status code 200 with no intermediary hops.
+3.) Anchor text and surrounding content remain unchanged and functional after the URL update.
+4.) The list of redirecting internal links from the audit export is cleared, showing zero remaining instances for the optimized pages.",Export the list of URLs that have internal links pointing to redirects from the Ahrefs crawl. From here you can go page by page updating the internal links
+Deep,Integrated SEO/AIO,Internal Linking (to other pages / homepage),Hyperlinks from the page you are working on to other pages on the site,"1.) All internal links point to relevant target pages like the homepage, service pages, or blogs.
+2.) Anchor text is descriptive and optimized with relevant keywords.
+3.) Links are distributed naturally throughout the content rather than clustered or forced.
+4.) Link styling is consistent with the rest of the site and easily identifiable as clickable.","- Can link to the homepage, service pages, or blogs
+- Ensure anchor text is keyword optimized
+- Placement — links should be distributed throughout the content naturally
+- Styling — links should be clearly identifiable as links, consistent with others"
+Deep,Integrated SEO/AIO,Internal Linking (to target page),Hyperlinks from other pages (on the site) to the page you are optimizing,"1.) Source pages selected for links are contextually relevant and useful for both users and search engines.
+2.) Anchor text is keyword-optimized to accurately reflect the content of the target page.
+3.) Link placement is natural and well-distributed throughout the body content of the source pages.
+4.) Links are clearly identifiable and follow the site's consistent styling standards.","- Pick relevant pages to link from (useful for users, contextual for search engines)
+- Ensure anchor text is keyword optimized
+- Placement — links should be distributed throughout the content naturally
+- Styling — links should be clearly identifiable as links, consistent with others"
+Technical Optimization,AIO,LLMs.txt Check,Adding or modifying LLMs.txt file for crawlers & AI bots ,"1.) File is accessible at the root directory (yourdomain.com/llms.txt)
+2.) Content follows Markdown standards, including an H1 title and a summary blockquote
+3.) Key pages are listed with descriptive titles, clean URLs, and brief context for AI models
+4.) Important machine-readable variants (e.g., llms-full.txt or .md mirrors) are linked if applicable
+5.) Language is plain and direct, optimized for machine parsing rather than human styling","-Check if the file exists at yourdomain.com/llms.txt
+-If missing, recommend creating one — especially important for clients targeting AEO/GEO visibility
+-File should include: site name, purpose, key topics/services, and links to important pages
+-Keep language plain and direct — written for machines, not humans
+-Also check for llms-full.txt which contains more detailed page-level content
+-Reference llmstxt.org for formatting standards and examples
+-Reassess as the standard evolves — adoption is still early but growing fast among AI-forward SEO strategies"
+Deep,Integrated SEO/AIO,LSI Keywords,"(Latent Semantic Indexing Keywords) Conceptually related terms and phrases that Google expects to see on a page discussing a particular topic, going beyond direct synonyms to encompass semantic relationships. ","1.) Primary keyword is supported by conceptually related LSI terms identified from ""People also ask"" or ""Related searches.""
+2.) LSI keywords are integrated naturally into the content and do not consist solely of direct synonyms.
+3.) Semantic relationships between the primary topic and LSI terms are clear and enhance the page's topical depth.
+4.) Implementation avoids keyword stuffing while reinforcing the informational hierarchy for both users and search engines.","Identify LSI keywords by looking at ""People also ask"" sections, ""Related searches"" at the bottom of Google SERPs
+
+Ex: Primary = Insurance,  LSIs = coverage, premiums, providers, liability, deductible"
+Core,SEO,Meta Description,The descriptive text below the blue link in search results. Designated by the meta description property in the head of the page source code. ,"1.) Meta description contains the primary keyword and geographic targets where relevant
+2.) Character count falls between 120 and 160 characters to ensure full visibility in search results
+3.) A clear call to action (CTA) is included to drive user engagement
+4.) The description provides a concise summary of the page purpose and incorporates relevant LSI keywords","- Support the primary keyword and geo targeting
+- Metas are also a great place for LSI keywords
+- Describe the purpose of the page for users
+- Should between 120 - 160 characters
+- Should include a CTA of some sort"
+Tech,Integrated SEO/AIO,NAP Information,"Name, Address, Phone-Number information. This involves adding or modifying it on the site.","1.) Name, Address, and Phone Number (NAP) details are present and accurate on the page.
+2.) Formatting and branding of NAP information are consistent with all other site instances.
+3.) NAP details exactly match the information listed on the Google Business Profile (GBP).","- Consitency is KEY, always keep the same formatting and branding across all instances
+- NAP info should align with the GBP"
+Off-site,AIO,Off-site: Youtube Optimization,"The process of optimizing a client's YouTube channel and video content so it ranks in both YouTube search and Google's video results, while also supporting the broader SEO strategy.","1.) Video titles are under 60 characters and include the primary keyword near the front
+2.) Descriptions prioritize keyword-rich content and essential links in the first 2-3 lines
+3.) Video chapters are implemented with accurate timestamps for improved navigability
+4.) Auto-captions are enabled and edited for accuracy to ensure crawlable content
+5.) VideoObject schema is correctly deployed on all website pages where videos are embedded","-Optimize video titles with primary keyword near the front (under 60 characters)
+-Write keyword-rich descriptions (first 2–3 lines are visible without expanding — prioritize these)
+-Use relevant tags, but don't keyword-stuff — focus on topic clusters
+-Add chapters (timestamps) to improve watch time and featured snippet eligibility
+-Enable auto-captions and edit for accuracy — captions are crawlable content
+-Link to relevant site pages in the description to drive referral traffic
+-Embed videos on corresponding service or blog pages to build page authority
+-Add VideoObject schema to embedded video pages on the website"
+Tech,Integrated SEO/AIO,Page Speed Analysis,"An evaluation of how quickly a webpage loads and becomes interactive for users, using Core Web Vitals and performance metrics as the benchmark.","1.) Performance metrics including LCP, CLS, and INP have been assessed using PageSpeed Insights, Lighthouse, or GSC.
+2.) Specific, actionable recommendations for quick wins such as image compression and resource optimization are documented for the dev team.
+3.) Mobile performance scores are prioritized and verified to meet core web vital benchmarks.
+4.) Post-implementation testing confirms that all identified speed issues have been resolved and scores have improved.","-Use Google PageSpeed Insights, Lighthouse, and GSC's Core Web Vitals report
+-Key metrics to assess: LCP (Largest Contentful Paint), CLS (Cumulative Layout Shift), INP (Interaction to Next Paint)
+-Identify quick wins: image compression, unused CSS/JS, render-blocking resources
+-Prioritize mobile scores — Google uses mobile-first indexing
+-Flag issues for the dev team with specific recommendations (not just scores)
+-Re-test after fixes are implemented to confirm improvement"
+Deep,AIO,Reformatting Content,"The process of restructuring existing on-page content into formats that are easier for both users and AI systems to read, parse, and cite — without rewriting the core information.","1.) Large paragraphs are converted into concise bullet points for scannability.
+2.) A brief introductory summary is placed at the top of the page.
+3.) Critical information is front-loaded within the early content.
+4.) Clear H2/H3 subheadings are used to define content hierarchy.
+5.) Final review confirms no original meaning or core information was lost or altered.","-Turn large paragraphs into concise bullet points for better AI readability and scannability
+-Add a brief introductory paragraph at the top of the page summarizing what the page is about
+-Front-load the most important information — AI models and Featured Snippets pull from early page content
+-Use clear H2/H3 subheadings to break up long sections
+QA required: review the page before and after reformatting to confirm no content was lost or altered in meaning"
+Tech,Integrated SEO/AIO,Robots.txt Check,Adding or modifying the robots.txt file,"1.) The robots.txt file is live and accessible at the root directory of the domain.
+2.) All new rules have been verified to ensure they only target intended paths and do not accidentally block critical content.
+3.) Existing directives necessary for proper site indexation remain intact and were not removed during the update.
+4.) The XML sitemap URL is correctly listed and remains functional within the file.",- If you add new rules you should know exactly what they are going to do
+Deep,Integrated SEO/AIO,Schema Markup (Structured Data),"Structured data that is deployed on the back end, detailing aspects of the page, site, or business to crawlers.","1.) Correct Schema type is applied (Article, FAQ, Product, or HowTo).
+
+2.) Schema passes the Google Rich Results Test with no ""Errors.""
+
+3.) FAQ Schema (if used) matches the visible text on the page exactly.","- Use schema generator for all basic forms and syntax - https://technicalseo.com/tools/schema-markup-generator/
+- Always verify using rich results tester - https://search.google.com/test/rich-results "
+Deep,Integrated SEO/AIO,Section Design / FAQ Content,"The intentional structuring of on-page content into clearly defined sections and FAQ blocks — both to improve user experience and to increase eligibility for rich results, Featured Snippets, and AI Overview citations.","1.) Video titles are under 60 characters and include the primary keyword near the front
+2.) Descriptions prioritize keyword-rich content and essential links in the first 2-3 lines
+3.) Video chapters are implemented with accurate timestamps for improved navigability
+4.) Auto-captions are enabled and edited for accuracy to ensure crawlable content
+5.) VideoObject schema is correctly deployed on all website pages where videos are embedded","-Break long-form content into labeled sections with descriptive H2/H3 subheadings
+-FAQ sections should use concise Q&A format — question as heading, direct answer in the first sentence
+-Implement FAQPage schema (JSON-LD) on pages with FAQ content
+-Write FAQ answers to directly address search intent — these are prime AI Overview source material
+-Aim for answers between 40–60 words — long enough to be useful, short enough to be scannable
+-Avoid stuffing FAQs with keywords — write naturally and conversationally
+-Place FAQ sections near the bottom of the page after core content is established
+-Revisit FAQ content regularly as People Also Ask (PAA) boxes evolve in SERPs"
+Deep,Integrated SEO/AIO,Social Metadata (OG and Twitter Tag),Tags embedded in HTML that control how your web content appears when shared on social media platforms ,"1.) Verify that Open Graph (OG) and Twitter tags are correctly embedded in the HTML source code.
+2.) Confirm that the social titles and descriptions are similar to the main metadata but include slight variations.
+3.) Ensure the social metadata has been updated via the ""Social"" tab in AIOSEO or Yoast for the specific page.","- Update these via the 'Social' tab of AIOSEO or Yoast on each individual page (wordpress)
+- Should be similar to the main metadata (title / meta) but should have some slight variation"
+Deep,AIO,Takeaways // TLDR;,Generating small snippets to introduce / summarize content quickly for users and AI engines,"1.) Summary is front-loaded at the top of the page to ensure immediate visibility for both users and AI crawlers.
+2.) Content accurately distills the main points of the page into a concise and direct overview.
+3.) Formatting utilizes scannable elements like bullet points or a brief blockquote to enhance readability.
+4.) Language is optimized for machine parsing while remaining helpful and informative for human readers.","- Do not add a title or header that literally says ""TLDR"", this is informal
+- Do not do this for any business / page, know the client and be certain they are okay with minor content additions
+- This is best for blog content or question and answer topics"
+Core,SEO,Title Tag,"The text that displays at the blue link in search results, designated by the <title> tag in the head of the page code.","1.) Primary keyword and geographic targets are included within the tag
+2.) Total character count remains under 60 characters to avoid truncation in search results
+3.) Brand name is appended to the end of the title and excluded from the 60-character count
+4.) Title tag accurately reflects the page content and aligns with search intent","- Incorporate primary keyword / geo targets
+- Character limit should aim to be under 60 characters or risk truncation in SERPS.
+          - We generally append the brand name to the title tag.
+          - We do not count the brand name towards this total character count. "
+Deep,AIO,TOC (table of contents) ,"A navigational section at the top of the document that lists all included SEO processes with jump links, allowing users to quickly locate a specific task or section.","1.) All section headers are listed in the correct order of appearance
+2.) Every item uses a functional anchor link that jumps directly to its specific section
+3.) Labels are short, descriptive, and match exact section heading names
+4.) The TOC is updated to reflect all current sections, including any new or renamed ones","-List all section headers in order of appearance
+-Use anchor links so each item jumps directly to its section
+-Update the TOC any time a new section is added or renamed
+-Keep labels short and descriptive — match exact section heading names"
+Deep,Integrated SEO/AIO,"Trust Signals (testimonials, reviews, etc.)",Adding a Google Review widget or section to the page,"1.) Review widget or testimonial section is correctly implemented and visible on the intended page.
+2.) All displayed reviews are positive, 5-star ratings to ensure brand safety.
+3.) Content is sourced exclusively from official Google reviews or verified client testimonials.
+4.) Implementation was coordinated through the web team or client without unauthorized plugin installation.","- Do not install plugins yourself, these should go through web or the client
+- Only use positive, 5 star reviews to be safe
+- Only use reviews directly from Google or testimonials provided by the client"
+Deep,SEO,URL Changes (redirection),Updating a URL slug to a more optimized structure,"1.) Video titles are under 60 characters and include the primary keyword near the front
+2.) Descriptions prioritize keyword-rich content and essential links in the first 2-3 lines
+3.) Video chapters are implemented with accurate timestamps for improved navigability
+4.) Auto-captions are enabled and edited for accuracy to ensure crawlable content
+5.) VideoObject schema is correctly deployed on all website pages where videos are embedded","- ALWAYS implement a redirect from the old URL to the new one, and submit the new one for indexing
+- Be very careful if you're updating a parent page
+      i.e.  /parent/ might have /parent/child-1/ and /parent/child-2/ nested under it.
+      if you redirect /parent/ it might cause the child pages to also 404
+- ALWAYS check page performance before making URL changes"
+Tech,Integrated SEO/AIO,XML Sitemaps,"Adding or modifying an XML sitemap for crawlers, and/or adding it to GSC","1.) Confirm the XML sitemap is accessible at the root directory (e.g., yourdomain.com/sitemap.xml) and uses UTF-8 encoding.
+2.) Verify that the sitemap includes only relevant, high-quality, canonical URLs (status 200) and excludes redirected, broken, noindexed, or disallowed pages.
+3.) Ensure that irrelevant sections like categories, tags, or author archives are excluded from the file.
+4.) Validate that the sitemap follows size limits (max 50,000 URLs or 50MB) and is properly referenced in the robots.txt file.
+5.) Confirm the sitemap has been submitted to Google Search Console and shows a Success status with no parsing errors.","- Sitemaps should only contain relevant sections (no categories, tags, author archives, etc.)
+- Sitemaps should be submitted to GSC and verified"

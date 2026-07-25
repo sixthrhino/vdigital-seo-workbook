@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fastmcp import FastMCP
+from seo_workbook_common.best_practices import BestPracticeCatalog
+from seo_workbook_common.best_practices.loader import slugify
+from seo_workbook_common.keywords import parse_keyword_target
+from seo_workbook_common.models.plan_session import PlanSession, SessionStatus, TouchpointAnswer
+from seo_workbook_common.validators import validate_touchpoint
+
+from ..session_store import SessionStore
+
+
+def _session_id(client: str, month: str) -> str:
+    return f"{slugify(client)}-{month}"
+
+
+def register(mcp: FastMCP, catalog: BestPracticeCatalog, store: SessionStore) -> None:
+    @mcp.tool()
+    def start_session(client: str, month: str, requested_by: str | None = None) -> dict:
+        """Start a new monthly SEO plan session for one client.
+
+        `month` must be "YYYY-MM" (e.g. "2026-06"). Returns the new session
+        with a generated session_id — use that id in every subsequent call.
+        Raises if a session for this client/month already exists; call
+        get_session with the same id to resume it instead.
+        """
+        session_id = _session_id(client, month)
+        session = PlanSession(session_id=session_id, client=client, month=month, requested_by=requested_by)
+        store.create(session)
+        return session.model_dump(mode="json")
+
+    @mcp.tool()
+    def add_page(session_id: str, url: str) -> dict:
+        """Add a page/URL to a session's scope of work for the month.
+
+        Call this once per page before recording any touchpoints for it.
+        """
+        session = store.get(session_id)
+        page = session.add_page(url)
+        store.save(session)
+        return page.model_dump(mode="json")
+
+    @mcp.tool()
+    def set_page_targeting(session_id: str, url: str, keyword: str | None = None, geo: str | None = None) -> dict:
+        """Set the primary keyword/volume target and geo for a page.
+
+        `keyword` accepts legacy shorthand like "electrician apprenticeship
+        (25k)" and splits it into separate keyword text and search_volume
+        fields automatically — pass the two only if you already have them
+        split.
+        """
+        session = store.get(session_id)
+        page = session.get_page(url)
+        if page is None:
+            raise ValueError(f"Page not found in session {session_id!r}: {url!r} — call add_page first")
+        if keyword is not None:
+            page.keyword_target = parse_keyword_target(keyword)
+        if geo is not None:
+            page.geo = geo
+        store.save(session)
+        return page.model_dump(mode="json")
+
+    @mcp.tool()
+    def record_touchpoint(session_id: str, url: str, touchpoint_id: str, items: list[dict[str, str]]) -> dict:
+        """Record (or replace) one touchpoint's answers for a page.
+
+        `items` is a list of field dicts. Most touchpoints (title tag, meta
+        description, H1) take exactly one item; others (heading changes,
+        internal linking, image alt text) commonly take several — one item
+        per instance (one per heading promoted, one per link added) rather
+        than bundling everything into one free-text blob. Call
+        get_touchpoint_detail(touchpoint_id) first to see what's expected.
+        Re-calling with the same touchpoint_id replaces the previous answer
+        for that touchpoint on this page.
+        """
+        session = store.get(session_id)
+        page = session.get_page(url)
+        if page is None:
+            raise ValueError(f"Page not found in session {session_id!r}: {url!r} — call add_page first")
+
+        try:
+            category = catalog.get(touchpoint_id).category
+        except KeyError as exc:
+            raise ValueError(str(exc)) from exc
+
+        validation = validate_touchpoint(touchpoint_id, items)
+        answer = TouchpointAnswer(touchpoint_id=touchpoint_id, category=category, items=items, validation=validation)
+
+        existing = page.get_touchpoint(touchpoint_id)
+        if existing is not None:
+            page.touchpoints.remove(existing)
+        page.touchpoints.append(answer)
+
+        store.save(session)
+        return answer.model_dump(mode="json")
+
+    @mcp.tool()
+    def list_open_questions(session_id: str) -> list[str]:
+        """List what's still unresolved in a session: pages with no
+        recorded touchpoints yet, and touchpoints that failed validation.
+        An empty list means the session is ready to finalize.
+        """
+        session = store.get(session_id)
+        return session.open_questions()
+
+    @mcp.tool()
+    def get_session(session_id: str) -> dict:
+        """Get the full current state of a session — all pages and their
+        recorded touchpoints — e.g. to summarize progress back to the user.
+        """
+        session = store.get(session_id)
+        return session.model_dump(mode="json")
+
+    @mcp.tool()
+    def finalize_session(session_id: str) -> dict:
+        """Mark a session finalized once every page has at least one
+        touchpoint and every touchpoint has passed validation. Raises with
+        the remaining open questions if the session isn't ready yet.
+        """
+        session = store.get(session_id)
+        if not session.is_complete():
+            open_questions = session.open_questions()
+            raise ValueError("Session is not complete yet — resolve these first: " + "; ".join(open_questions))
+        session.status = SessionStatus.FINALIZED
+        session.finalized_at = datetime.now(timezone.utc)
+        store.save(session)
+        return session.model_dump(mode="json")

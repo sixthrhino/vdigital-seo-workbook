@@ -1,0 +1,38 @@
+[project]
+name = "seo-workbook-mcp"
+version = "0.1.0"
+description = "FastMCP server exposing deterministic SEO best-practices catalog, session, and validation tools."
+requires-python = ">=3.11"
+# seo-workbook-common isn't listed here since it's not published anywhere —
+# install both with `pip install -e ../common -e .` (the Docker build does
+# the equivalent from a repo-root build context so it can COPY common/ in).
+dependencies = [
+    "fastmcp>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+seo-workbook-mcp = "seo_workbook_mcp.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["seo_workbook_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# Explicit sys.path entries rather than relying on `pip install -e`: with two
+# locally-path-installed packages in one venv (seo-workbook-common and this
+# package), hatchling's editable-install .pth resolution was flaky here —
+# present in site-packages but inconsistently picked up across runs. This
+# sidesteps it entirely; unaffected by how the real Docker image installs
+# these (a normal non-editable `pip install`, which doesn't use .pth files).
+pythonpath = ["../common", "."]
