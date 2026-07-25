@@ -6,6 +6,10 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "jinja2>=3.1",
+    "weasyprint>=62",
+    "google-api-python-client>=2.140",
+    "google-auth>=2.30",
 ]
 
 [project.optional-dependencies]
