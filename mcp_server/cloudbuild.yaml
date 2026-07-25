@@ -1,0 +1,7 @@
+# Submitted from the repo root (`gcloud builds submit . --config=mcp_server/cloudbuild.yaml ...`)
+# so the Dockerfile can COPY the shared common/ package in.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "mcp_server/Dockerfile", "-t", "$_IMAGE", "."]
+images:
+  - "$_IMAGE"

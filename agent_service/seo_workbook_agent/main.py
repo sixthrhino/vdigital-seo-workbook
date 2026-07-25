@@ -19,3 +19,16 @@ def create_app(agent_core: AgentCore | None = None) -> FastAPI:
 
 
 app = create_app()
+
+
+def main() -> None:
+    # Cloud Run injects PORT and expects the process to bind 0.0.0.0:$PORT.
+    import os
+
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+
+if __name__ == "__main__":
+    main()

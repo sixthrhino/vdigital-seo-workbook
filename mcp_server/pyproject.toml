@@ -6,10 +6,10 @@ requires-python = ">=3.11"
 # seo-workbook-common isn't listed here since it's not published anywhere —
 # install both with `pip install -e ../common -e .` (the Docker build does
 # the equivalent from a repo-root build context so it can COPY common/ in).
-# jinja2/weasyprint/google-api-python-client/google-auth are seo-workbook-
-# common's own dependencies (used by its output/ package) — listed again
-# here too since nothing resolves them transitively across the pythonpath
-# seam described above; keep in sync with common/pyproject.toml.
+# jinja2/weasyprint/google-api-python-client/google-auth are
+# seo-workbook-common's `output` extra (its output/ package) — listed again
+# here directly since nothing resolves extras transitively across the
+# pythonpath seam described above; keep in sync with common/pyproject.toml.
 dependencies = [
     "fastmcp>=3.0",
     "jinja2>=3.1",

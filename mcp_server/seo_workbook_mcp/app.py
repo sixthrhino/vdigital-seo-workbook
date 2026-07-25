@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -51,7 +52,11 @@ mcp = create_app()
 
 
 def main() -> None:
-    mcp.run()
+    # Cloud Run injects PORT and expects the process to bind 0.0.0.0:$PORT;
+    # streamable-http (not stdio) is required so agent_service can reach
+    # this over the network rather than as a subprocess.
+    port = int(os.environ.get("PORT", 8080))
+    mcp.run(transport="http", host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,10 @@ tests (see that package's `pyproject.toml` for its exact dependencies):
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 ```
 
+`common` also has an `output` extra (Jinja2/WeasyPrint/Google Sheets API —
+only needed by mcp_server at runtime, but by common's own tests too, since
+they cover that code): install it there with `.[dev,output]` instead.
+
 `mcp_server` and `agent_service` both depend on `common`; rather than an
 editable cross-package install (flaky in this environment with hatchling —
 see the note in their `pyproject.toml` files), they resolve it via pytest's
