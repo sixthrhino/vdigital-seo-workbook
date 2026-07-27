@@ -7,6 +7,7 @@ from seo_workbook_common.best_practices import BestPracticeCatalog
 from seo_workbook_common.output import (
     build_sheets_service,
     build_storage_client,
+    iam_signing_credentials,
     render_summary_html,
     session_to_rows,
     upload_html_report,
@@ -31,6 +32,7 @@ def register(
     settings: McpSettings,
     sheets_client_factory: Callable[[], Any] = build_sheets_service,
     storage_client_factory: Callable[[], Any] = build_storage_client,
+    signing_credentials_factory: Callable[[], tuple[str, str]] = iam_signing_credentials,
 ) -> None:
     @mcp.tool()
     def render_session_report(session_id: str) -> dict:
@@ -47,7 +49,15 @@ def register(
         html = render_summary_html(session, catalog=catalog)
         filename = f"{session.client}-{session.month}-seo-plan.html".replace(" ", "-")
         storage_client = storage_client_factory()
-        report_url = upload_html_report(storage_client, settings.reports_bucket, filename, html)
+        service_account_email, access_token = signing_credentials_factory()
+        report_url = upload_html_report(
+            storage_client,
+            settings.reports_bucket,
+            filename,
+            html,
+            service_account_email=service_account_email,
+            access_token=access_token,
+        )
         return {"filename": filename, "report_url": report_url}
 
     @mcp.tool()

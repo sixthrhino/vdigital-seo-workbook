@@ -50,19 +50,31 @@ deploy_mcp() {
   # finalize_session always persists to MongoDB (it's the system of record,
   # not an optional export) — MONGO_URI is the full Atlas connection string
   # (mongodb+srv://user:password@host/?...) with the real password already
-  # substituted; unlike RUN_API_KEY this can't be auto-generated, so it must
-  # be provided by the caller. Stored in Secret Manager, never passed as a
-  # plain env var or logged.
-  if [ -z "${MONGO_URI:-}" ]; then
-    echo "ERROR: MONGO_URI must be set, e.g.:"
-    echo "  export MONGO_URI='mongodb+srv://user:password@host/?appName=...'"
-    echo "  ./deploy.sh mcp"
+  # substituted; unlike RUN_API_KEY this can't be auto-generated. Stored in
+  # Secret Manager, never passed as a plain env var or logged.
+  #
+  # MONGO_URI is only required in *this* shell the first time, or whenever
+  # you're rotating the password — if the secret already exists and you
+  # didn't set MONGO_URI, this reuses the existing version rather than
+  # forcing you to have the password in this environment on every deploy.
+  # To create/update it out-of-band instead (recommended, keeps the
+  # password out of this shell entirely):
+  #   echo -n '<connection-string>' | gcloud secrets create seo-workbook-mongo-uri \
+  #     --project "${PROJECT}" --data-file=- --replication-policy=automatic
+  if [ -n "${MONGO_URI:-}" ]; then
+    if gcloud secrets describe seo-workbook-mongo-uri --project "${PROJECT}" &>/dev/null; then
+      echo -n "${MONGO_URI}" | gcloud secrets versions add seo-workbook-mongo-uri --project "${PROJECT}" --data-file=-
+    else
+      echo -n "${MONGO_URI}" | gcloud secrets create seo-workbook-mongo-uri --project "${PROJECT}" --data-file=- --replication-policy=automatic
+    fi
+  elif ! gcloud secrets describe seo-workbook-mongo-uri --project "${PROJECT}" &>/dev/null; then
+    echo "ERROR: seo-workbook-mongo-uri secret doesn't exist yet and MONGO_URI isn't set."
+    echo "Either export MONGO_URI and re-run, or create the secret directly:"
+    echo "  echo -n '<connection-string>' | gcloud secrets create seo-workbook-mongo-uri \\"
+    echo "    --project ${PROJECT} --data-file=- --replication-policy=automatic"
     exit 1
-  fi
-  if gcloud secrets describe seo-workbook-mongo-uri --project "${PROJECT}" &>/dev/null; then
-    echo -n "${MONGO_URI}" | gcloud secrets versions add seo-workbook-mongo-uri --project "${PROJECT}" --data-file=-
   else
-    echo -n "${MONGO_URI}" | gcloud secrets create seo-workbook-mongo-uri --project "${PROJECT}" --data-file=- --replication-policy=automatic
+    echo "==> MONGO_URI not set — reusing existing seo-workbook-mongo-uri secret."
   fi
 
   echo "==> Deploying mcp-server to Cloud Run..."

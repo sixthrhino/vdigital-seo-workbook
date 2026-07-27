@@ -27,11 +27,15 @@ async def _start_session_with_a_touchpoint(client, client_name="KYZ", month="202
 class _FakeBlob:
     def __init__(self):
         self.uploaded_content = None
+        self.generate_signed_url_calls = []
 
     def upload_from_string(self, content, content_type=None):
         self.uploaded_content = content
 
-    def generate_signed_url(self, *, version, expiration, method):
+    def generate_signed_url(self, *, version, expiration, method, service_account_email=None, access_token=None):
+        self.generate_signed_url_calls.append(
+            {"service_account_email": service_account_email, "access_token": access_token}
+        )
         return "https://storage.googleapis.com/fake-bucket/fake-report.html?signed=1"
 
 
@@ -59,7 +63,11 @@ class _FakeStorageClient:
 def mcp_app_with_fake_storage():
     fake_client = _FakeStorageClient()
     settings = McpSettings(best_practices_csv_path=str(CSV_PATH), reports_bucket="test-reports-bucket")
-    app = create_app(settings, storage_client_factory=lambda: fake_client)
+    app = create_app(
+        settings,
+        storage_client_factory=lambda: fake_client,
+        signing_credentials_factory=lambda: ("fake@test.iam.gserviceaccount.com", "fake-access-token"),
+    )
     return app, fake_client
 
 
@@ -73,9 +81,15 @@ async def test_render_session_report_uploads_and_returns_signed_url(mcp_app_with
     assert result.data["report_url"] == "https://storage.googleapis.com/fake-bucket/fake-report.html?signed=1"
     assert fake_client.requested_bucket_name == "test-reports-bucket"
 
-    uploaded_html = fake_client.bucket_instance.blobs["KYZ-2026-06-seo-plan.html"].uploaded_content
-    assert "KYZ" in uploaded_html
-    assert "Title Tag" in uploaded_html  # resolved via catalog, not the raw touchpoint_id
+    blob = fake_client.bucket_instance.blobs["KYZ-2026-06-seo-plan.html"]
+    assert "KYZ" in blob.uploaded_content
+    assert "Title Tag" in blob.uploaded_content  # resolved via catalog, not the raw touchpoint_id
+
+    # Cloud Run's attached service account has no private key — signing
+    # must go through the IAM API instead, which needs these two explicitly.
+    signing_call = blob.generate_signed_url_calls[0]
+    assert signing_call["service_account_email"] == "fake@test.iam.gserviceaccount.com"
+    assert signing_call["access_token"] == "fake-access-token"
 
 
 async def test_render_session_report_unknown_session_raises(mcp_app_with_fake_storage):

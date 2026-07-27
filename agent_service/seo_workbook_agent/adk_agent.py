@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+
 from google.adk.agents import Agent
+from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
 
@@ -66,9 +69,50 @@ truth, not your own memory of a prior turn.
 """
 
 
+def mcp_audience(mcp_server_url: str) -> str:
+    """Cloud Run's IAM check validates an ID token's audience against the
+    *service's* base URL, not the sub-path — strip the /mcp suffix
+    FastMCP's streamable-http transport adds so the audience actually
+    matches what mcp-server's ingress expects.
+    """
+    suffix = "/mcp"
+    if mcp_server_url.endswith(suffix):
+        return mcp_server_url[: -len(suffix)]
+    return mcp_server_url
+
+
+def _mcp_header_provider(mcp_server_url: str):
+    """Attaches a Google-signed ID token to every MCP request.
+
+    mcp-server is deployed with --no-allow-unauthenticated (Cloud Run IAM),
+    so without this every call gets rejected with a 403 before it even
+    reaches our code — and critically, the agent has no visibility into
+    that failure and will just hallucinate a plausible-looking response
+    instead of surfacing an error (this is exactly what happened before
+    this was added: fabricated session/page confirmations, and eventually
+    a fake g.co/BardReport share link instead of a real render_session_report
+    result).
+    """
+    audience = mcp_audience(mcp_server_url)
+
+    async def header_provider(context: ReadonlyContext) -> dict[str, str]:
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+
+        def _fetch_token() -> str:
+            request = google.auth.transport.requests.Request()
+            return google.oauth2.id_token.fetch_id_token(request, audience)
+
+        token = await asyncio.to_thread(_fetch_token)
+        return {"Authorization": f"Bearer {token}"}
+
+    return header_provider
+
+
 def build_agent(settings: AgentSettings) -> Agent:
     toolset = McpToolset(
         connection_params=StreamableHTTPConnectionParams(url=settings.mcp_server_url),
+        header_provider=_mcp_header_provider(settings.mcp_server_url),
     )
     return Agent(
         name="seo_workbook_agent",

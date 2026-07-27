@@ -14,8 +14,8 @@ class McpSettings(Settings):
     # configured yet.
     reports_bucket: str = ""
     mongo_uri: str = ""
-    mongo_database: str = "seo_workbook"
-    mongo_collection: str = "plan_sessions"
+    mongo_database: str = "seo"
+    mongo_collection: str = "workbook"
 
 
 @lru_cache

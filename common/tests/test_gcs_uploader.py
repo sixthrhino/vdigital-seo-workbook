@@ -13,8 +13,16 @@ class _FakeBlob:
         self.uploaded_content = content
         self.uploaded_content_type = content_type
 
-    def generate_signed_url(self, *, version, expiration, method):
-        self.generate_signed_url_calls.append({"version": version, "expiration": expiration, "method": method})
+    def generate_signed_url(self, *, version, expiration, method, service_account_email=None, access_token=None):
+        self.generate_signed_url_calls.append(
+            {
+                "version": version,
+                "expiration": expiration,
+                "method": method,
+                "service_account_email": service_account_email,
+                "access_token": access_token,
+            }
+        )
         return "https://storage.googleapis.com/fake-bucket/fake-blob?signed=1"
 
 
@@ -71,3 +79,34 @@ def test_upload_html_report_respects_custom_expiration():
 
     blob = client.bucket_instance.blobs["report.html"]
     assert blob.generate_signed_url_calls[0]["expiration"] == datetime.timedelta(hours=1)
+
+
+def test_upload_html_report_omits_iam_signing_kwargs_by_default():
+    # Cloud Run's attached service account has no private key — generate_
+    # signed_url must be told to sign via the IAM API by passing these two
+    # kwargs explicitly. Omitting both (the default) is only correct for a
+    # local key-file scenario, where it should sign without them.
+    client = _FakeStorageClient()
+
+    upload_html_report(client, "my-bucket", "report.html", "<html></html>")
+
+    call = client.bucket_instance.blobs["report.html"].generate_signed_url_calls[0]
+    assert call["service_account_email"] is None
+    assert call["access_token"] is None
+
+
+def test_upload_html_report_passes_iam_signing_credentials_when_given():
+    client = _FakeStorageClient()
+
+    upload_html_report(
+        client,
+        "my-bucket",
+        "report.html",
+        "<html></html>",
+        service_account_email="agent@my-project.iam.gserviceaccount.com",
+        access_token="fake-access-token",
+    )
+
+    call = client.bucket_instance.blobs["report.html"].generate_signed_url_calls[0]
+    assert call["service_account_email"] == "agent@my-project.iam.gserviceaccount.com"
+    assert call["access_token"] == "fake-access-token"
