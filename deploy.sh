@@ -162,11 +162,18 @@ deploy_agent() {
   # attach a Cloud Run identity token, so /chat enforces its own OIDC check
   # in-app instead (see chat_auth.py) — /run does the same with the
   # RUN_API_KEY secret above.
+  # --no-cpu-throttling: /chat acks immediately and keeps working in a
+  # FastAPI BackgroundTask afterward (see chat_router.py) — Cloud Run's
+  # default CPU throttling freezes CPU once it considers the request
+  # "done" (i.e. right after the response is sent), which would stall
+  # that background work. This keeps CPU allocated until it actually
+  # finishes and posts the real reply back to Chat.
   gcloud run deploy seo-workbook-agent-service \
     --image "${AGENT_IMAGE}" \
     --region "${REGION}" \
     --project "${PROJECT}" \
     --allow-unauthenticated \
+    --no-cpu-throttling \
     --set-env-vars "SEO_WORKBOOK_ENVIRONMENT=production,SEO_WORKBOOK_MCP_SERVER_URL=${MCP_URL}/mcp,SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_AGENT_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},SEO_WORKBOOK_CHAT_AUDIENCE=${CHAT_AUDIENCE}" \
     --set-secrets "SEO_WORKBOOK_RUN_API_KEY=seo-workbook-run-api-key:latest" \
     --memory 1Gi \
