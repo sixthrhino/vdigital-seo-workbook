@@ -232,10 +232,19 @@ async def test_finalize_session_succeeds_once_complete(mcp_app, fake_mongo_colle
     assert saved["client"] == "KYZ"
 
 
-async def test_finalize_session_requires_mongo_configured():
+async def test_start_session_requires_mongo_configured():
+    # Every mutating tool persists to Mongo now (not just finalize_session),
+    # so a misconfigured deployment fails on the very first call instead of
+    # only surfacing at the end of a long conversation.
     settings = McpSettings(best_practices_csv_path=str(CSV_PATH))  # mongo_uri left empty
     app = create_app(settings)
     async with Client(app) as client:
+        with pytest.raises(ToolError, match="mongo_uri is not configured"):
+            await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+
+
+async def test_draft_session_is_persisted_to_mongo_before_finalizing(mcp_app, fake_mongo_collection):
+    async with Client(mcp_app) as client:
         session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
         session_id = session.data["session_id"]
         await client.call_tool("add_page", {"session_id": session_id, "url": "https://kyz.com/a/"})
@@ -248,5 +257,9 @@ async def test_finalize_session_requires_mongo_configured():
                 "items": [{"new_value": "Good Title", "primary_keyword": "insurance"}],
             },
         )
-        with pytest.raises(ToolError, match="mongo_uri is not configured"):
-            await client.call_tool("finalize_session", {"session_id": session_id})
+
+    # Persisted incrementally as a draft — recoverable even before finalizing.
+    saved = fake_mongo_collection.documents[session_id]
+    assert saved["status"] == "draft"
+    assert saved["finalized_at"] is None
+    assert saved["pages"][0]["touchpoints"][0]["touchpoint_id"] == "title_tag"

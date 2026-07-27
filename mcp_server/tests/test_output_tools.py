@@ -4,7 +4,7 @@ import pytest
 
 from seo_workbook_mcp.app import create_app
 
-from conftest import CSV_PATH
+from conftest import CSV_PATH, FakeMongoCollection
 from seo_workbook_mcp.config import McpSettings
 
 
@@ -62,11 +62,14 @@ class _FakeStorageClient:
 @pytest.fixture
 def mcp_app_with_fake_storage():
     fake_client = _FakeStorageClient()
-    settings = McpSettings(best_practices_csv_path=str(CSV_PATH), reports_bucket="test-reports-bucket")
+    settings = McpSettings(
+        best_practices_csv_path=str(CSV_PATH), reports_bucket="test-reports-bucket", mongo_uri="mongodb://fake-uri"
+    )
     app = create_app(
         settings,
         storage_client_factory=lambda: fake_client,
         signing_credentials_factory=lambda: ("fake@test.iam.gserviceaccount.com", "fake-access-token"),
+        mongo_collection_factory=lambda: FakeMongoCollection(),
     )
     return app, fake_client
 
@@ -143,8 +146,12 @@ class _FakeSheetsService:
 @pytest.fixture
 def mcp_app_with_fake_sheets():
     fake_service = _FakeSheetsService()
-    settings = McpSettings(best_practices_csv_path=str(CSV_PATH))
-    app = create_app(settings, sheets_client_factory=lambda: fake_service)
+    settings = McpSettings(best_practices_csv_path=str(CSV_PATH), mongo_uri="mongodb://fake-uri")
+    app = create_app(
+        settings,
+        sheets_client_factory=lambda: fake_service,
+        mongo_collection_factory=lambda: FakeMongoCollection(),
+    )
     return app, fake_service
 
 

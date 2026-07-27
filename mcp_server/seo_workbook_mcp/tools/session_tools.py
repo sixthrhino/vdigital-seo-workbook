@@ -31,6 +31,21 @@ def register(
 
     get_mongo_collection = mongo_collection_factory or _default_mongo_collection_factory
 
+    def _persist(session: PlanSession) -> None:
+        """Persist to both the in-memory store and MongoDB on every
+        mutation, not just at finalize — MongoDB holds a continuously
+        current snapshot (status "draft" until finalize_session flips it),
+        so a session survives an mcp-server restart/redeploy instead of
+        only the final one being recoverable. Raises the same clear error
+        as finalize_session if MongoDB isn't configured, so a
+        misconfigured deployment fails on the very first tool call rather
+        than 20 minutes into a conversation.
+        """
+        store.save(session)
+        if not settings.mongo_uri:
+            raise ValueError("mongo_uri is not configured (SEO_WORKBOOK_MONGO_URI)")
+        save_session(get_mongo_collection(), session)
+
     @mcp.tool()
     def start_session(client: str, month: str, requested_by: str | None = None) -> dict:
         """Start a new monthly SEO plan session for one client.
@@ -43,6 +58,7 @@ def register(
         session_id = _session_id(client, month)
         session = PlanSession(session_id=session_id, client=client, month=month, requested_by=requested_by)
         store.create(session)
+        _persist(session)
         return session.model_dump(mode="json")
 
     @mcp.tool()
@@ -53,7 +69,7 @@ def register(
         """
         session = store.get(session_id)
         page = session.add_page(url)
-        store.save(session)
+        _persist(session)
         return page.model_dump(mode="json")
 
     @mcp.tool()
@@ -73,7 +89,7 @@ def register(
             page.keyword_target = parse_keyword_target(keyword)
         if geo is not None:
             page.geo = geo
-        store.save(session)
+        _persist(session)
         return page.model_dump(mode="json")
 
     @mcp.tool()
@@ -107,7 +123,7 @@ def register(
             page.touchpoints.remove(existing)
         page.touchpoints.append(answer)
 
-        store.save(session)
+        _persist(session)
         return answer.model_dump(mode="json")
 
     @mcp.tool()
@@ -133,20 +149,15 @@ def register(
         touchpoint and every touchpoint has passed validation, and persist
         it to MongoDB as the system of record. Raises with the remaining
         open questions if the session isn't ready yet, or a clear error if
-        MongoDB isn't configured — this always persists, it's not optional.
+        MongoDB isn't configured.
         """
         session = store.get(session_id)
         if not session.is_complete():
             open_questions = session.open_questions()
             raise ValueError("Session is not complete yet — resolve these first: " + "; ".join(open_questions))
-        if not settings.mongo_uri:
-            raise ValueError("mongo_uri is not configured (SEO_WORKBOOK_MONGO_URI)")
 
         session.status = SessionStatus.FINALIZED
         session.finalized_at = datetime.now(timezone.utc)
-        store.save(session)
-
-        collection = get_mongo_collection()
-        save_session(collection, session)
+        _persist(session)
 
         return session.model_dump(mode="json")
