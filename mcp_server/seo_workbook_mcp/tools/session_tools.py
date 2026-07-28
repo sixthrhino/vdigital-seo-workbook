@@ -85,6 +85,35 @@ def register(
         return session.model_dump(mode="json")
 
     @mcp.tool()
+    def find_session(client: str, month: str) -> dict:
+        """Look up an existing session by client and month (YYYY-MM) —
+        use this when asked to summarize, review, or resume a plan from a
+        specific month without already knowing its session_id (e.g. "what
+        did we do for KYZ in June?" or "summarize Sixth Rhino's plan for
+        2026-06"). Works even if the session was created in a different
+        conversation or before an mcp-server restart, since it falls back
+        to MongoDB the same way get_session does.
+
+        Returns the same shape as get_session — touchpoint_id values are
+        internal ids, not display names; call get_touchpoint_detail to
+        resolve one if you need to describe it back to the specialist. For
+        a polished, shareable write-up instead of a conversational
+        recap, follow up with render_session_report(session_id).
+
+        Raises if no session exists yet for that client/month — call
+        start_session instead in that case.
+        """
+        session_id = _session_id(client, month)
+        try:
+            session = store.get(session_id)
+        except SessionNotFoundError as exc:
+            raise ValueError(
+                f"No session found for client={client!r}, month={month!r} "
+                f"(session_id={session_id!r}). Call start_session to begin one."
+            ) from exc
+        return session.model_dump(mode="json")
+
+    @mcp.tool()
     def add_page(session_id: str, url: str) -> dict:
         """Add a page/URL to a session's scope of work for the month.
 

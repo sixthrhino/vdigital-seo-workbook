@@ -50,6 +50,55 @@ async def test_start_session_does_not_overwrite_a_record_that_only_survives_in_m
     assert saved["pages"][0]["url"] == "https://kyz.com/a/"
 
 
+async def test_find_session_returns_existing_session_by_client_and_month(mcp_app):
+    async with Client(mcp_app) as client:
+        await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        await client.call_tool("add_page", {"session_id": "kyz-2026-06", "url": "https://kyz.com/a/"})
+
+        result = await client.call_tool("find_session", {"client": "KYZ", "month": "2026-06"})
+
+    assert result.data["session_id"] == "kyz-2026-06"
+    assert len(result.data["pages"]) == 1
+    assert result.data["pages"][0]["url"] == "https://kyz.com/a/"
+
+
+async def test_find_session_unknown_client_month_raises(mcp_app):
+    async with Client(mcp_app) as client:
+        with pytest.raises(ToolError, match="No session found"):
+            await client.call_tool("find_session", {"client": "KYZ", "month": "2026-06"})
+
+
+async def test_find_session_works_after_a_simulated_restart():
+    # The real motivation: asking for a summary of a past month's plan from
+    # a brand new conversation, where nothing is in this process's memory —
+    # only find_session's Mongo fallback (via SessionStore.get) makes that
+    # work at all.
+    shared_mongo_collection = FakeMongoCollection()
+    settings = McpSettings(best_practices_csv_path=str(CSV_PATH), mongo_uri="mongodb://fake-uri")
+
+    app_before_restart = create_app(settings, mongo_collection_factory=lambda: shared_mongo_collection)
+    async with Client(app_before_restart) as client:
+        await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        await client.call_tool("add_page", {"session_id": "kyz-2026-06", "url": "https://kyz.com/a/"})
+        await client.call_tool(
+            "record_touchpoint",
+            {
+                "session_id": "kyz-2026-06",
+                "url": "https://kyz.com/a/",
+                "touchpoint_id": "title_tag",
+                "items": [{"new_value": "Good Title", "primary_keyword": "insurance"}],
+            },
+        )
+        await client.call_tool("finalize_session", {"session_id": "kyz-2026-06"})
+
+    app_after_restart = create_app(settings, mongo_collection_factory=lambda: shared_mongo_collection)
+    async with Client(app_after_restart) as client:
+        result = await client.call_tool("find_session", {"client": "KYZ", "month": "2026-06"})
+
+    assert result.data["session_id"] == "kyz-2026-06"
+    assert result.data["status"] == "finalized"
+
+
 async def test_add_page_appends_to_session(mcp_app):
     async with Client(mcp_app) as client:
         session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
