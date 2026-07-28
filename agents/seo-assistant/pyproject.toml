@@ -1,0 +1,61 @@
+[project]
+name = "seo-assistant"
+version = "0.1.0"
+description = "Orchestrator ADK agent routing between seo-workbook-agent (plan capture) and seo-testing-agent (live-site QA) as sub-agents, so both live in one GCP project/Chat app."
+requires-python = ">=3.11"
+# seo-workbook-agent and seo-testing-agent aren't published anywhere and
+# aren't installed as path dependencies here — resolved via pytest's
+# `pythonpath` setting for tests, same reasoning as seo-workbook-agent's own
+# dependency on seo-workbook-common (editable cross-package installs have
+# been flaky in this environment — see that package's pyproject.toml). The
+# Docker build does a normal non-editable `pip install` of all four
+# components from a repo-root context instead, which isn't affected.
+#
+# Dependencies below are the union of seo-workbook-agent's and
+# seo-testing-agent's own direct dependencies (both packages' code runs in
+# this one process) — keep in sync with both.
+# google-adk pinned to seo-testing-agent's exact version (its stricter
+# constraint) — confirmed compatible with seo-workbook-agent's code
+# (McpToolset.header_provider, StreamableHTTPConnectionParams both present
+# in 2.3.0).
+dependencies = [
+    "google-adk==2.3.0",
+    "mcp>=1.9.0,<2",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "google-auth>=2.30",
+    "google-api-python-client>=2.140",
+    "google-cloud-storage>=2.16.0",
+    "google-cloud-aiplatform>=1.60.0",
+    "pymongo>=4.6",
+    "jinja2>=3.1",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "respx>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/seo_assistant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = [
+    "../../shared/src",
+    "../seo-workbook-agent/src",
+    "../seo-testing-agent/src",
+    "src",
+]

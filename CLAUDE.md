@@ -6,8 +6,15 @@ server can be shared by more than one agent, each of which is deployed to
 its own GCP project (a Google Chat API constraint — see deploy.sh):
 
 ```
-agents/seo-workbook-agent/       ADK conversational agent for monthly SEO plans
-agents/seo-testing-agent/        ADK agent running live-site SEO/content QA checks
+agents/seo-assistant/            Orchestrator ADK agent — the only one
+                                 registering a Google Chat app; routes to
+                                 the two specialists below as in-process
+                                 ADK sub-agents (see its own pyproject.toml
+                                 note on why it depends on both directly)
+agents/seo-workbook-agent/       ADK agent for monthly SEO plans — capable
+                                 standalone too, not just as a sub-agent
+agents/seo-testing-agent/        ADK agent running live-site SEO/content QA
+                                 checks — same, capable standalone
 mcp-servers/seo-workbook-mcp/    FastMCP tool server for seo-workbook-agent (also
                                  has data/: best-practices CSV + legacy imports)
 mcp-servers/seo-testing-mcp/     FastMCP tool server for seo-testing-agent (also
@@ -20,9 +27,14 @@ shared/                          seo-workbook-common — cross-cutting code shar
 ```
 
 Each component uses a `src/` layout (`<component>/src/<package_name>/`,
-tests at `<component>/tests/`). Each agent/mcp-server pair deploys to its
-own GCP project (a Google Chat API constraint) via its own deploy script:
-`deploy.sh` for seo-workbook, `deploy-seo-testing.sh` for seo-testing.
+tests at `<component>/tests/`). seo-assistant is the only agent that needs
+its own GCP project now (it's the sole Chat-registering surface); the two
+specialist agents' own standalone Cloud Run deployments (and GCP projects)
+stay up independently — seo-assistant just also constructs their agent
+objects in-process and calls the same MCP servers directly (cross-project
+Cloud Run IAM grants — see deploy-seo-assistant.sh). Three deploy scripts:
+`deploy.sh` (seo-workbook), `deploy-seo-testing.sh` (seo-testing),
+`deploy-seo-assistant.sh` (the orchestrator).
 
 ## Test Before Push
 
@@ -36,6 +48,7 @@ cd mcp-servers/seo-workbook-mcp && .venv/bin/pytest
 cd agents/seo-workbook-agent && .venv/bin/pytest
 cd mcp-servers/seo-testing-mcp && .venv/bin/pytest -m "not integration"
 cd agents/seo-testing-agent && .venv/bin/pytest
+cd agents/seo-assistant && .venv/bin/pytest
 ```
 
 First time in a fresh clone, set up each package's venv before running its
@@ -64,6 +77,12 @@ changes in between) — every component's `pyproject.toml` sets
 for exactly this reason, so tests never depend on the editable install
 actually resolving. The real Docker image installs non-editably in every
 case, which doesn't use .pth files and isn't affected either way.
+
+`seo-assistant` depends on `shared`, `seo-workbook-agent`, *and*
+`seo-testing-agent` directly (its sub-agents run in its own process — see
+its pyproject.toml) — same `pythonpath`-based resolution for tests, same
+non-editable multi-package `pip install` for its Docker image (see its
+Dockerfile).
 
 
 ## Commit Message Format
