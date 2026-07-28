@@ -18,7 +18,10 @@ requires-python = ">=3.11"
 # actually needed.
 dependencies = [
     "google-adk>=1.0",
-    "mcp>=1.0",
+    # google-adk 2.5.0's McpToolset breaks on mcp 2.0.0 (a real, live PyPI
+    # release as of 2026-07-28) — pinned below 2 until google-adk publishes
+    # a version that's actually compatible with it.
+    "mcp>=1.0,<2",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "google-auth>=2.30",
