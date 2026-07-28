@@ -47,25 +47,28 @@ class _FakeWorkbook:
 class _FakeSheetsClient:
     def __init__(self, records=_SAMPLE_RECORDS):
         self._worksheet = _FakeWorksheet(records)
+        self.opened_with: list[str] = []
 
     def open_by_key(self, spreadsheet_id):
+        self.opened_with.append(spreadsheet_id)
         return _FakeWorkbook(self._worksheet)
 
 
 @pytest.fixture
 def import_app():
     fake_mongo_collection = FakeMongoCollection()
+    fake_sheets_client = _FakeSheetsClient()
     settings = McpSettings(best_practices_csv_path=str(CSV_PATH), mongo_uri="mongodb://fake-uri")
     app = create_app(
         settings,
         mongo_collection_factory=lambda: fake_mongo_collection,
-        workbook_sheets_client_factory=lambda: _FakeSheetsClient(),
+        workbook_sheets_client_factory=lambda: fake_sheets_client,
     )
-    return app, fake_mongo_collection
+    return app, fake_mongo_collection, fake_sheets_client
 
 
 async def test_import_legacy_workbook_imports_every_month_found(import_app):
-    app, fake_mongo_collection = import_app
+    app, fake_mongo_collection, _ = import_app
     async with Client(app) as client:
         result = await client.call_tool(
             "import_legacy_workbook", {"spreadsheet_id": "sheet-id", "client": "KYZ"}
@@ -85,7 +88,7 @@ async def test_import_legacy_workbook_imports_every_month_found(import_app):
 
 
 async def test_import_legacy_workbook_filters_to_a_single_month(import_app):
-    app, fake_mongo_collection = import_app
+    app, fake_mongo_collection, _ = import_app
     async with Client(app) as client:
         result = await client.call_tool(
             "import_legacy_workbook", {"spreadsheet_id": "sheet-id", "client": "KYZ", "month": "2025-09"}
@@ -95,8 +98,24 @@ async def test_import_legacy_workbook_filters_to_a_single_month(import_app):
     assert "kyz-2025-10" not in fake_mongo_collection.documents
 
 
+async def test_import_legacy_workbook_accepts_a_full_share_url(import_app):
+    app, _, fake_sheets_client = import_app
+    async with Client(app) as client:
+        result = await client.call_tool(
+            "import_legacy_workbook",
+            {
+                "spreadsheet_id": "https://docs.google.com/spreadsheets/d/sheet-id/edit#gid=0",
+                "client": "KYZ",
+                "month": "2025-09",
+            },
+        )
+
+    assert result.data["imported"] == ["kyz-2025-09"]
+    assert fake_sheets_client.opened_with == ["sheet-id"]
+
+
 async def test_import_legacy_workbook_skips_a_month_that_already_has_a_session(import_app):
-    app, fake_mongo_collection = import_app
+    app, fake_mongo_collection, _ = import_app
     async with Client(app) as client:
         await client.call_tool("start_session", {"client": "KYZ", "month": "2025-09"})
         result = await client.call_tool(

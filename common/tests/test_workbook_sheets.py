@@ -3,9 +3,30 @@ import pytest
 from seo_workbook_common.legacy_import.workbook_sheets import (
     _get_col,
     _parse_month_year,
+    extract_spreadsheet_id,
     get_month_rows,
     list_workbook_months,
 )
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("1AbCdEfGhIjKlMnOpQrStUvWxYz", "1AbCdEfGhIjKlMnOpQrStUvWxYz"),
+        (
+            "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit#gid=0",
+            "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+        ),
+        (
+            "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit?usp=sharing",
+            "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+        ),
+        ("https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz", "1AbCdEfGhIjKlMnOpQrStUvWxYz"),
+        ("  1AbCdEfGhIjKlMnOpQrStUvWxYz  ", "1AbCdEfGhIjKlMnOpQrStUvWxYz"),
+    ],
+)
+def test_extract_spreadsheet_id(raw, expected):
+    assert extract_spreadsheet_id(raw) == expected
 
 
 @pytest.mark.parametrize(

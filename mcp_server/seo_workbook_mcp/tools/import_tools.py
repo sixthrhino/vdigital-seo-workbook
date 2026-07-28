@@ -4,7 +4,13 @@ from typing import Any, Callable
 
 from fastmcp import FastMCP
 from seo_workbook_common.best_practices.loader import slugify
-from seo_workbook_common.legacy_import import build_session_from_rows, build_sheets_client, get_month_rows, list_workbook_months
+from seo_workbook_common.legacy_import import (
+    build_session_from_rows,
+    build_sheets_client,
+    extract_spreadsheet_id,
+    get_month_rows,
+    list_workbook_months,
+)
 from seo_workbook_common.storage import build_mongo_collection, save_session
 
 from ..config import McpSettings
@@ -31,12 +37,15 @@ def register(
         find_session/render_session_report/export_session_to_sheet like any
         other client's data.
 
-        `spreadsheet_id` is the id from the sheet's URL (between /d/ and
-        /edit). The spreadsheet must already be shared (view access is
-        enough) with this server's service account — a service account's
-        Sheets access is granted the same way a person's would be, not
-        through IAM roles, so sharing it is a one-time manual step outside
-        this tool.
+        `spreadsheet_id` accepts either the bare id from the sheet's URL
+        (between /d/ and /edit) or the full share URL/link as-is — whatever
+        the specialist pasted, no need to dig the id out of it first.
+
+        The spreadsheet must already be shared (view access is enough)
+        with this server's service account — a service account's Sheets
+        access is granted the same way a person's would be, not through
+        IAM roles, so sharing it is a one-time manual step outside this
+        tool.
 
         `month` limits the import to one "YYYY-MM" month; omit it to import
         every month found in the sheet in one call.
@@ -55,6 +64,7 @@ def register(
         if not settings.mongo_uri:
             raise ValueError("mongo_uri is not configured (SEO_WORKBOOK_MONGO_URI)")
 
+        spreadsheet_id = extract_spreadsheet_id(spreadsheet_id)
         sheets_client = workbook_sheets_client_factory()
         months = [month] if month else list_workbook_months(sheets_client, spreadsheet_id)
 

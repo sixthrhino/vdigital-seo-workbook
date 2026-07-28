@@ -15,6 +15,21 @@ _MONTH_MAP = {
     "jul": "07", "aug": "08", "sep": "09", "oct": "10", "nov": "11", "dec": "12",
 }
 
+_SPREADSHEET_ID_IN_URL_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9_-]+)")
+
+
+def extract_spreadsheet_id(url_or_id: str) -> str:
+    """Accept either a bare spreadsheet id or a full Google Sheets share
+    URL (e.g. "https://docs.google.com/spreadsheets/d/{id}/edit#gid=0")
+    and return just the id — so callers can paste whatever they were
+    given (a shared link) rather than having to manually dig the id back
+    out of it first.
+    """
+    value = url_or_id.strip()
+    match = _SPREADSHEET_ID_IN_URL_RE.search(value)
+    return match.group(1) if match else value
+
+
 _SCOPES = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive.readonly",
