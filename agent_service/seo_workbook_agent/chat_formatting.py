@@ -1,6 +1,33 @@
 from __future__ import annotations
 
+import re
 from typing import Any
+
+# Google Chat's text-message markup is a small, specific subset of
+# Markdown — *bold* (single asterisk), _italic_, no headers, no numbered
+# lists, and links as <url|text> rather than [text](url). See
+# https://developers.google.com/workspace/chat/format-messages
+#
+# The agent's system prompt already asks Gemini to write in this style
+# directly, but instruction-following on formatting isn't 100% reliable
+# for longer structured replies — Gemini reverts to standard
+# CommonMark-style **bold**/headers/links often enough that this
+# deterministic backstop is worth having. Not DOTALL: bold spans are kept
+# to a single line so one stray/unpaired ** can't swallow the rest of the
+# message looking for its match.
+_MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_MD_HEADER_RE = re.compile(r"^#{1,6}[ \t]+(.+)$", re.MULTILINE)
+_MD_LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)")
+
+
+def to_chat_markup(text: str) -> str:
+    """Convert common standard-Markdown patterns to Google Chat's markup
+    before posting a reply. See module docstring for why this exists.
+    """
+    text = _MD_LINK_RE.sub(lambda m: f"<{m.group(2)}|{m.group(1)}>", text)
+    text = _MD_BOLD_RE.sub(lambda m: f"*{m.group(1) or m.group(2)}*", text)
+    text = _MD_HEADER_RE.sub(lambda m: f"*{m.group(1).strip()}*", text)
+    return text
 
 
 def extract_message(event: dict[str, Any]) -> tuple[str, str, str, str | None] | None:

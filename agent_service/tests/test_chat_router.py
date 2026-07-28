@@ -101,6 +101,24 @@ def test_chat_acks_immediately_and_posts_reply_asynchronously(monkeypatch):
     assert call["body"] == {"text": "stub reply"}
 
 
+def test_chat_converts_markdown_bold_to_chat_markup_before_posting(monkeypatch):
+    stub = StubAgentCore(reply="**Primary Keyword:** Custom Clothing")
+    client, _, fake_chat_service = _client(monkeypatch, agent_core=stub)
+    with patch(VERIFY_PATH):
+        client.post(
+            "/chat",
+            headers={"Authorization": "Bearer faketoken"},
+            json={
+                "type": "MESSAGE",
+                "message": {"text": "summarize"},
+                "space": {"name": "spaces/AAAA"},
+                "user": {"name": "users/123"},
+            },
+        )
+    call = fake_chat_service.spaces_resource.messages_resource.create_calls[0]
+    assert call["body"]["text"] == "*Primary Keyword:* Custom Clothing"
+
+
 def test_chat_posts_reply_into_the_same_thread_when_present(monkeypatch):
     client, _, fake_chat_service = _client(monkeypatch)
     with patch(VERIFY_PATH):

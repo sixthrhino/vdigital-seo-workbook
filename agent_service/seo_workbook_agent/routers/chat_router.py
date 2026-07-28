@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from ..agent_core import AgentCore
 from ..chat_auth import ChatAuthError, verify_chat_bearer_token
 from ..chat_client import post_chat_message
-from ..chat_formatting import extract_message
+from ..chat_formatting import extract_message, to_chat_markup
 from ..config import get_agent_settings
 
 router = APIRouter()
@@ -39,7 +39,7 @@ async def _process_and_reply(
 
     try:
         chat_client = chat_client_factory()
-        post_chat_message(chat_client, space_name, reply, thread_name)
+        post_chat_message(chat_client, space_name, to_chat_markup(reply), thread_name)
     except Exception:
         logger.exception("Failed to post the reply back to Google Chat")
 
