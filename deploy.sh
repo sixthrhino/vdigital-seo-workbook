@@ -28,7 +28,12 @@ TARGET="${1:-both}"
 # simplest IAM story for now (matches the precedent this was adapted from).
 # That identity needs Vertex AI access (for the agent's Gemini calls),
 # Cloud Run Invoker on mcp-server (so the agent's ID-token-authenticated MCP
-# calls are accepted), and Secret Manager access (for RUN_API_KEY).
+# calls are accepted), Secret Manager access (for RUN_API_KEY and
+# MONGO_URI), object admin on the reports bucket, and self-signBlob
+# (serviceAccountTokenCreator) permission for generating signed report
+# URLs — the last two used by mcp-server's render_session_report AND
+# agent-service's /reports/{token} redirect, since both share this same
+# identity, setup_project()'s grants cover both already.
 _project_number() {
   gcloud projects describe "${PROJECT}" --format="value(projectNumber)"
 }
@@ -77,6 +82,16 @@ deploy_mcp() {
     echo "==> MONGO_URI not set — reusing existing seo-workbook-mongo-uri secret."
   fi
 
+  # render_session_report returns a short https://<agent-url>/reports/{token}
+  # link rather than a raw signed GCS URL (see reports_router.py) — needs
+  # agent-service's own stable URL, which only exists once agent-service has
+  # been deployed at least once. Empty on a brand-new project's first `mcp`
+  # deploy; re-run './deploy.sh mcp' after the first 'agent' deploy to pick
+  # it up, same caveat as CHAT_AUDIENCE below.
+  EXISTING_AGENT_URL=$(gcloud run services describe seo-workbook-agent-service \
+    --region "${REGION}" --project "${PROJECT}" \
+    --format "value(status.url)" 2>/dev/null || true)
+
   echo "==> Deploying mcp-server to Cloud Run..."
   # --session-affinity: our in-memory SessionStore (in-progress PlanSessions,
   # see session_store.py) lives in the handling instance's memory, not
@@ -95,7 +110,7 @@ deploy_mcp() {
     --project "${PROJECT}" \
     --no-allow-unauthenticated \
     --session-affinity \
-    --set-env-vars "SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_REPORTS_BUCKET=${REPORTS_BUCKET},SEO_WORKBOOK_MONGO_DATABASE=${MONGO_DATABASE:-seo_workbook},SEO_WORKBOOK_MONGO_COLLECTION=${MONGO_COLLECTION:-plan_sessions}" \
+    --set-env-vars "SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_REPORTS_BUCKET=${REPORTS_BUCKET},SEO_WORKBOOK_MONGO_DATABASE=${MONGO_DATABASE:-seo_workbook},SEO_WORKBOOK_MONGO_COLLECTION=${MONGO_COLLECTION:-plan_sessions},SEO_WORKBOOK_AGENT_PUBLIC_URL=${EXISTING_AGENT_URL}" \
     --set-secrets "SEO_WORKBOOK_MONGO_URI=seo-workbook-mongo-uri:latest" \
     --memory 512Mi \
     --timeout 300
@@ -112,6 +127,11 @@ deploy_mcp() {
     --member="serviceAccount:$(_default_compute_sa)" \
     --role="roles/run.invoker" \
     --quiet
+
+  if [ -z "${EXISTING_AGENT_URL}" ]; then
+    echo "==> agent-service doesn't exist yet, so SEO_WORKBOOK_AGENT_PUBLIC_URL was empty this run."
+    echo "    Deploy agent-service, then re-run './deploy.sh mcp' once more to set it."
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -168,14 +188,22 @@ deploy_agent() {
   # "done" (i.e. right after the response is sent), which would stall
   # that background work. This keeps CPU allocated until it actually
   # finishes and posts the real reply back to Chat.
+  # SEO_WORKBOOK_REPORTS_BUCKET / MONGO_DATABASE / MONGO_URI: the
+  # /reports/{token} redirect route (reports_router.py) resolves a
+  # short share-token back to a signed GCS URL, so it needs the same
+  # bucket + Mongo database mcp-server writes tokens into. Both services
+  # run as the same default compute SA (see comment atop this file), so no
+  # extra IAM grants are needed beyond what setup_project() already did for
+  # mcp-server — reused here as-is. seo-workbook-mongo-uri must already
+  # exist (created by a prior './deploy.sh mcp' run).
   gcloud run deploy seo-workbook-agent-service \
     --image "${AGENT_IMAGE}" \
     --region "${REGION}" \
     --project "${PROJECT}" \
     --allow-unauthenticated \
     --no-cpu-throttling \
-    --set-env-vars "SEO_WORKBOOK_ENVIRONMENT=production,SEO_WORKBOOK_MCP_SERVER_URL=${MCP_URL}/mcp,SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_AGENT_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},SEO_WORKBOOK_CHAT_AUDIENCE=${CHAT_AUDIENCE}" \
-    --set-secrets "SEO_WORKBOOK_RUN_API_KEY=seo-workbook-run-api-key:latest" \
+    --set-env-vars "SEO_WORKBOOK_ENVIRONMENT=production,SEO_WORKBOOK_MCP_SERVER_URL=${MCP_URL}/mcp,SEO_WORKBOOK_GCP_PROJECT_ID=${PROJECT},SEO_WORKBOOK_GCP_REGION=${REGION},SEO_WORKBOOK_AGENT_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},SEO_WORKBOOK_CHAT_AUDIENCE=${CHAT_AUDIENCE},SEO_WORKBOOK_REPORTS_BUCKET=${REPORTS_BUCKET},SEO_WORKBOOK_MONGO_DATABASE=${MONGO_DATABASE:-seo_workbook}" \
+    --set-secrets "SEO_WORKBOOK_RUN_API_KEY=seo-workbook-run-api-key:latest,SEO_WORKBOOK_MONGO_URI=seo-workbook-mongo-uri:latest" \
     --memory 1Gi \
     --timeout 300 \
     --concurrency 10

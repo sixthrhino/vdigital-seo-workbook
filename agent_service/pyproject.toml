@@ -9,6 +9,13 @@ requires-python = ">=3.11"
 # resolution was flaky in this environment with multiple locally-path
 # packages sharing one venv). The Docker build does a normal non-editable
 # `pip install` from a repo-root context instead, which isn't affected.
+# google-cloud-storage/pymongo/jinja2 are seo-workbook-common's `output`/
+# `storage` extras (used by the /reports/{token} redirect route) — listed
+# again here directly for the same reason; keep in sync with
+# common/pyproject.toml. jinja2 itself is unused here, but importing
+# anything from seo_workbook_common.output runs that package's __init__,
+# which imports report_renderer (jinja2) regardless of which submodule is
+# actually needed.
 dependencies = [
     "google-adk>=1.0",
     "mcp>=1.0",
@@ -16,6 +23,9 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "google-auth>=2.30",
     "google-api-python-client>=2.140",
+    "google-cloud-storage>=2.10",
+    "pymongo>=4.6",
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]

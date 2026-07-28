@@ -25,6 +25,22 @@ def fake_mongo_collection():
     return FakeMongoCollection()
 
 
+class FakeReportTokensCollection:
+    """Minimal in-memory stand-in for the report_tokens Mongo collection —
+    just enough of `insert_one`/`find_one` for create_report_token /
+    lookup_report_token's tests.
+    """
+
+    def __init__(self):
+        self.documents: dict[str, dict] = {}
+
+    def insert_one(self, document):
+        self.documents[document["_id"]] = document
+
+    def find_one(self, filter):
+        return self.documents.get(filter["_id"])
+
+
 @pytest.fixture
 def mcp_app(fake_mongo_collection):
     settings = McpSettings(best_practices_csv_path=str(CSV_PATH), mongo_uri="mongodb://fake-uri")

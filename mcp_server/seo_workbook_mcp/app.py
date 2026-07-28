@@ -7,7 +7,7 @@ from typing import Any, Callable
 from fastmcp import FastMCP
 from seo_workbook_common.best_practices import load_catalog
 from seo_workbook_common.logging import configure_logging
-from seo_workbook_common.output import build_sheets_service, build_storage_client, iam_signing_credentials
+from seo_workbook_common.output import build_sheets_service, build_storage_client
 
 from .config import McpSettings, get_mcp_settings
 from .session_store import SessionStore
@@ -34,8 +34,8 @@ def create_app(
     settings: McpSettings | None = None,
     sheets_client_factory: Callable[[], Any] = build_sheets_service,
     storage_client_factory: Callable[[], Any] = build_storage_client,
-    signing_credentials_factory: Callable[[], tuple[str, str]] = iam_signing_credentials,
     mongo_collection_factory: Callable[[], Any] | None = None,
+    report_tokens_collection_factory: Callable[[], Any] | None = None,
 ) -> FastMCP:
     settings = settings or get_mcp_settings()
     configure_logging(settings.log_level)
@@ -53,7 +53,7 @@ def create_app(
         settings,
         sheets_client_factory=sheets_client_factory,
         storage_client_factory=storage_client_factory,
-        signing_credentials_factory=signing_credentials_factory,
+        report_tokens_collection_factory=report_tokens_collection_factory,
     )
 
     return mcp

@@ -4,7 +4,7 @@ import pytest
 
 from seo_workbook_mcp.app import create_app
 
-from conftest import CSV_PATH, FakeMongoCollection
+from conftest import CSV_PATH, FakeMongoCollection, FakeReportTokensCollection
 from seo_workbook_mcp.config import McpSettings
 
 
@@ -27,16 +27,9 @@ async def _start_session_with_a_touchpoint(client, client_name="KYZ", month="202
 class _FakeBlob:
     def __init__(self):
         self.uploaded_content = None
-        self.generate_signed_url_calls = []
 
     def upload_from_string(self, content, content_type=None):
         self.uploaded_content = content
-
-    def generate_signed_url(self, *, version, expiration, method, service_account_email=None, access_token=None):
-        self.generate_signed_url_calls.append(
-            {"service_account_email": service_account_email, "access_token": access_token}
-        )
-        return "https://storage.googleapis.com/fake-bucket/fake-report.html?signed=1"
 
 
 class _FakeBucket:
@@ -61,42 +54,48 @@ class _FakeStorageClient:
 
 @pytest.fixture
 def mcp_app_with_fake_storage():
-    fake_client = _FakeStorageClient()
+    fake_storage_client = _FakeStorageClient()
+    fake_report_tokens = FakeReportTokensCollection()
     settings = McpSettings(
-        best_practices_csv_path=str(CSV_PATH), reports_bucket="test-reports-bucket", mongo_uri="mongodb://fake-uri"
+        best_practices_csv_path=str(CSV_PATH),
+        reports_bucket="test-reports-bucket",
+        mongo_uri="mongodb://fake-uri",
+        agent_public_url="https://agent.example.com",
     )
     app = create_app(
         settings,
-        storage_client_factory=lambda: fake_client,
-        signing_credentials_factory=lambda: ("fake@test.iam.gserviceaccount.com", "fake-access-token"),
+        storage_client_factory=lambda: fake_storage_client,
         mongo_collection_factory=lambda: FakeMongoCollection(),
+        report_tokens_collection_factory=lambda: fake_report_tokens,
     )
-    return app, fake_client
+    return app, fake_storage_client, fake_report_tokens
 
 
-async def test_render_session_report_uploads_and_returns_signed_url(mcp_app_with_fake_storage):
-    app, fake_client = mcp_app_with_fake_storage
+async def test_render_session_report_uploads_and_returns_a_short_share_link(mcp_app_with_fake_storage):
+    app, fake_storage_client, fake_report_tokens = mcp_app_with_fake_storage
     async with Client(app) as client:
         session_id = await _start_session_with_a_touchpoint(client)
         result = await client.call_tool("render_session_report", {"session_id": session_id})
 
     assert result.data["filename"] == "KYZ-2026-06-seo-plan.html"
-    assert result.data["report_url"] == "https://storage.googleapis.com/fake-bucket/fake-report.html?signed=1"
-    assert fake_client.requested_bucket_name == "test-reports-bucket"
+    assert fake_storage_client.requested_bucket_name == "test-reports-bucket"
 
-    blob = fake_client.bucket_instance.blobs["KYZ-2026-06-seo-plan.html"]
+    blob = fake_storage_client.bucket_instance.blobs["KYZ-2026-06-seo-plan.html"]
     assert "KYZ" in blob.uploaded_content
     assert "Title Tag" in blob.uploaded_content  # resolved via catalog, not the raw touchpoint_id
 
-    # Cloud Run's attached service account has no private key — signing
-    # must go through the IAM API instead, which needs these two explicitly.
-    signing_call = blob.generate_signed_url_calls[0]
-    assert signing_call["service_account_email"] == "fake@test.iam.gserviceaccount.com"
-    assert signing_call["access_token"] == "fake-access-token"
+    # Short redirect link, not a raw ~400-char signed GCS URL — the token
+    # resolves back to the exact bucket/blob that was just uploaded.
+    report_url = result.data["report_url"]
+    assert report_url.startswith("https://agent.example.com/reports/")
+    token = report_url.rsplit("/", 1)[-1]
+    stored = fake_report_tokens.documents[token]
+    assert stored["bucket_name"] == "test-reports-bucket"
+    assert stored["blob_name"] == "KYZ-2026-06-seo-plan.html"
 
 
 async def test_render_session_report_unknown_session_raises(mcp_app_with_fake_storage):
-    app, _ = mcp_app_with_fake_storage
+    app, _, _ = mcp_app_with_fake_storage
     async with Client(app) as client:
         with pytest.raises(ToolError):
             await client.call_tool("render_session_report", {"session_id": "does-not-exist"})
@@ -108,6 +107,25 @@ async def test_render_session_report_requires_reports_bucket_configured(mcp_app)
     async with Client(mcp_app) as client:
         session_id = await _start_session_with_a_touchpoint(client)
         with pytest.raises(ToolError, match="reports_bucket is not configured"):
+            await client.call_tool("render_session_report", {"session_id": session_id})
+
+
+async def test_render_session_report_requires_agent_public_url_configured():
+    settings = McpSettings(
+        best_practices_csv_path=str(CSV_PATH),
+        reports_bucket="test-reports-bucket",
+        mongo_uri="mongodb://fake-uri",
+        # agent_public_url deliberately left unset
+    )
+    app = create_app(
+        settings,
+        storage_client_factory=lambda: _FakeStorageClient(),
+        mongo_collection_factory=lambda: FakeMongoCollection(),
+        report_tokens_collection_factory=lambda: FakeReportTokensCollection(),
+    )
+    async with Client(app) as client:
+        session_id = await _start_session_with_a_touchpoint(client)
+        with pytest.raises(ToolError, match="agent_public_url is not configured"):
             await client.call_tool("render_session_report", {"session_id": session_id})
 
 

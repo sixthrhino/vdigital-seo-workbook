@@ -1,6 +1,6 @@
 import datetime
 
-from seo_workbook_common.output.gcs_uploader import upload_html_report
+from seo_workbook_common.output.gcs_uploader import generate_report_url, upload_html
 
 
 class _FakeBlob:
@@ -32,8 +32,7 @@ class _FakeBucket:
         self.requested_bucket_name = None
 
     def blob(self, blob_name):
-        blob = _FakeBlob()
-        self.blobs[blob_name] = blob
+        blob = self.blobs.setdefault(blob_name, _FakeBlob())
         return blob
 
 
@@ -47,62 +46,59 @@ class _FakeStorageClient:
         return self.bucket_instance
 
 
-def test_upload_html_report_uploads_content_and_returns_signed_url():
+def test_upload_html_uploads_content():
     client = _FakeStorageClient()
 
-    url = upload_html_report(client, "my-bucket", "kyz-2026-06.html", "<html>hi</html>")
+    upload_html(client, "my-bucket", "kyz-2026-06.html", "<html>hi</html>")
 
-    assert url == "https://storage.googleapis.com/fake-bucket/fake-blob?signed=1"
     assert client.requested_bucket_name == "my-bucket"
-
     blob = client.bucket_instance.blobs["kyz-2026-06.html"]
     assert blob.uploaded_content == "<html>hi</html>"
     assert blob.uploaded_content_type == "text/html; charset=utf-8"
 
 
-def test_upload_html_report_uses_v4_signing_with_default_week_long_expiration():
+def test_generate_report_url_uses_v4_signing_with_default_week_long_expiration():
     client = _FakeStorageClient()
 
-    upload_html_report(client, "my-bucket", "report.html", "<html></html>")
+    url = generate_report_url(client, "my-bucket", "report.html")
 
-    blob = client.bucket_instance.blobs["report.html"]
-    call = blob.generate_signed_url_calls[0]
+    assert url == "https://storage.googleapis.com/fake-bucket/fake-blob?signed=1"
+    call = client.bucket_instance.blobs["report.html"].generate_signed_url_calls[0]
     assert call["version"] == "v4"
     assert call["method"] == "GET"
     assert call["expiration"] == datetime.timedelta(days=7)
 
 
-def test_upload_html_report_respects_custom_expiration():
+def test_generate_report_url_respects_custom_expiration():
     client = _FakeStorageClient()
 
-    upload_html_report(client, "my-bucket", "report.html", "<html></html>", expiration=datetime.timedelta(hours=1))
+    generate_report_url(client, "my-bucket", "report.html", expiration=datetime.timedelta(hours=1))
 
-    blob = client.bucket_instance.blobs["report.html"]
-    assert blob.generate_signed_url_calls[0]["expiration"] == datetime.timedelta(hours=1)
+    call = client.bucket_instance.blobs["report.html"].generate_signed_url_calls[0]
+    assert call["expiration"] == datetime.timedelta(hours=1)
 
 
-def test_upload_html_report_omits_iam_signing_kwargs_by_default():
+def test_generate_report_url_omits_iam_signing_kwargs_by_default():
     # Cloud Run's attached service account has no private key — generate_
     # signed_url must be told to sign via the IAM API by passing these two
     # kwargs explicitly. Omitting both (the default) is only correct for a
     # local key-file scenario, where it should sign without them.
     client = _FakeStorageClient()
 
-    upload_html_report(client, "my-bucket", "report.html", "<html></html>")
+    generate_report_url(client, "my-bucket", "report.html")
 
     call = client.bucket_instance.blobs["report.html"].generate_signed_url_calls[0]
     assert call["service_account_email"] is None
     assert call["access_token"] is None
 
 
-def test_upload_html_report_passes_iam_signing_credentials_when_given():
+def test_generate_report_url_passes_iam_signing_credentials_when_given():
     client = _FakeStorageClient()
 
-    upload_html_report(
+    generate_report_url(
         client,
         "my-bucket",
         "report.html",
-        "<html></html>",
         service_account_email="agent@my-project.iam.gserviceaccount.com",
         access_token="fake-access-token",
     )
