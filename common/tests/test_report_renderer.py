@@ -79,6 +79,28 @@ def test_render_summary_html_shows_a_human_readable_month(sample_session):
     assert "June 2026" in html
 
 
+def test_render_summary_html_shows_ops_standards_meet_column_as_yes(sample_session):
+    html = render_summary_html(sample_session)
+    assert "Ops Standards Meet" in html
+    assert "Yes" in html
+
+
+def test_render_summary_html_shows_ops_standards_meet_column_as_no_on_failed_validation():
+    session = PlanSession(session_id="kyz-2026-06", client="KYZ", month="2026-06")
+    page = session.add_page("https://kyz.com/service-a/")
+    page.touchpoints.append(
+        TouchpointAnswer(
+            touchpoint_id="title_tag",
+            category="Core",
+            items=[{"new_value": "x" * 100}],
+            validation=ValidationResult(passed=False, messages=["title exceeds 60 characters"]),
+        )
+    )
+    html = render_summary_html(session)
+    assert "No" in html
+    assert "title exceeds 60 characters" not in html
+
+
 def test_render_summary_html_includes_print_media_rule(sample_session):
     # Delivery is: open the report link in a browser, print to PDF from
     # there — no server-side PDF generation — so the print stylesheet is
