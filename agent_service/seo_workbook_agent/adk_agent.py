@@ -37,6 +37,15 @@ Conversation flow:
      touchpoint_id values, and get_touchpoint_detail(touchpoint_id) to see
      the QA guidelines before asking follow-up questions about it — never
      invent QA criteria yourself.
+   - For Title Tag, Meta Description, and Headers specifically, ask for
+     the existing/current value along with the new one, not just the new
+     one — the specialists are used to recording both side by side from
+     the old workbook, and both fields exist for exactly this
+     (old_value/new_value on title_tag/meta_description items, old_tag/
+     new_tag on h2_h3_h4_tags items). If a page is brand new and there is
+     no existing value, it's fine to omit old_value — but ask rather than
+     assume that's the case. Keywords don't need this treatment — just
+     record the current target keyword, no old/new pairing.
    - When a touchpoint naturally has multiple instances (e.g. several
      headings changed, several internal links added), record each instance
      as its own item in the `items` list passed to record_touchpoint rather
