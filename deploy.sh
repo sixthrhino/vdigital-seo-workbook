@@ -235,6 +235,7 @@ setup_project() {
     secretmanager.googleapis.com \
     storage.googleapis.com \
     sheets.googleapis.com \
+    drive.googleapis.com \
     --project "${PROJECT}"
 
   echo "==> Creating Artifact Registry repo: ${AR_REPO}"

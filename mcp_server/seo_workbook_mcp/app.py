@@ -6,13 +6,14 @@ from typing import Any, Callable
 
 from fastmcp import FastMCP
 from seo_workbook_common.best_practices import load_catalog
+from seo_workbook_common.legacy_import import build_sheets_client
 from seo_workbook_common.logging import configure_logging
 from seo_workbook_common.output import build_sheets_service, build_storage_client
 from seo_workbook_common.storage import build_mongo_collection
 
 from .config import McpSettings, get_mcp_settings
 from .session_store import SessionStore
-from .tools import catalog_tools, output_tools, session_tools
+from .tools import catalog_tools, import_tools, output_tools, session_tools
 
 # mcp_server/seo_workbook_mcp/app.py -> repo root
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +38,7 @@ def create_app(
     storage_client_factory: Callable[[], Any] = build_storage_client,
     mongo_collection_factory: Callable[[], Any] | None = None,
     report_tokens_collection_factory: Callable[[], Any] | None = None,
+    workbook_sheets_client_factory: Callable[[], Any] = build_sheets_client,
 ) -> FastMCP:
     settings = settings or get_mcp_settings()
     configure_logging(settings.log_level)
@@ -63,6 +65,13 @@ def create_app(
         sheets_client_factory=sheets_client_factory,
         storage_client_factory=storage_client_factory,
         report_tokens_collection_factory=report_tokens_collection_factory,
+    )
+    import_tools.register(
+        mcp,
+        store,
+        settings,
+        mongo_collection_factory=get_mongo_collection,
+        workbook_sheets_client_factory=workbook_sheets_client_factory,
     )
 
     return mcp

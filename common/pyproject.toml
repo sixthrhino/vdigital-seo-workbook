@@ -23,6 +23,12 @@ output = [
 storage = [
     "pymongo>=4.6",
 ]
+# Only mcp_server's import_legacy_workbook tool reads a client's legacy
+# workbook off Google Sheets — same reasoning as `output`/`storage` above.
+legacy_import = [
+    "gspread>=6.0",
+    "google-auth>=2.30",
+]
 dev = [
     "pytest>=8.0",
 ]
