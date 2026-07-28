@@ -6,16 +6,23 @@ server can be shared by more than one agent, each of which is deployed to
 its own GCP project (a Google Chat API constraint — see deploy.sh):
 
 ```
-agents/seo-workbook-agent/       ADK conversational agent
-mcp-servers/seo-workbook-mcp/    FastMCP tool server (also has data/, this
-                                 component's best-practices CSV + legacy
-                                 workbook imports)
-shared/                          seo-workbook-common — cross-cutting code
-                                 shared by both of the above
+agents/seo-workbook-agent/       ADK conversational agent for monthly SEO plans
+agents/seo-testing-agent/        ADK agent running live-site SEO/content QA checks
+mcp-servers/seo-workbook-mcp/    FastMCP tool server for seo-workbook-agent (also
+                                 has data/: best-practices CSV + legacy imports)
+mcp-servers/seo-testing-mcp/     FastMCP tool server for seo-testing-agent (also
+                                 has data/: QA rules catalog, cities DB, dictionaries)
+shared/                          seo-workbook-common — cross-cutting code shared
+                                 by the seo-workbook pair only (seo-testing's pair
+                                 deliberately duplicates its own small parsing
+                                 helpers instead — see workbook_upload.py's
+                                 docstring for why)
 ```
 
 Each component uses a `src/` layout (`<component>/src/<package_name>/`,
-tests at `<component>/tests/`).
+tests at `<component>/tests/`). Each agent/mcp-server pair deploys to its
+own GCP project (a Google Chat API constraint) via its own deploy script:
+`deploy.sh` for seo-workbook, `deploy-seo-testing.sh` for seo-testing.
 
 ## Test Before Push
 
@@ -27,6 +34,8 @@ directory and confirm everything passes:
 cd shared && .venv/bin/pytest
 cd mcp-servers/seo-workbook-mcp && .venv/bin/pytest
 cd agents/seo-workbook-agent && .venv/bin/pytest
+cd mcp-servers/seo-testing-mcp && .venv/bin/pytest -m "not integration"
+cd agents/seo-testing-agent && .venv/bin/pytest
 ```
 
 First time in a fresh clone, set up each package's venv before running its
@@ -41,11 +50,20 @@ Sheets API, PyMongo, gspread — only needed by the mcp-server at runtime,
 but by shared's own tests too, since they cover that code): install it
 there with `.[dev,output,storage,legacy_import]` instead.
 
-The mcp-server and agent both depend on `shared`; rather than an editable
-cross-package install (flaky in this environment with hatchling — see the
-note in their `pyproject.toml` files), they resolve it via pytest's
-`pythonpath` setting for tests, and expect `PYTHONPATH` to include
-`../../shared/src` when actually running the service outside of pytest.
+The seo-workbook mcp-server and agent both depend on `shared`; rather than
+an editable cross-package install (flaky in this environment with
+hatchling — see the note in their `pyproject.toml` files), they resolve it
+via pytest's `pythonpath` setting for tests, and expect `PYTHONPATH` to
+include `../../shared/src` when actually running the service outside of
+pytest. seo-testing's pair has no shared/ dependency at all, but hits the
+*same* hatchling editable-install flakiness installing themselves (this
+was confirmed directly, not theoretical — an identical install sequence
+worked once, then silently stopped resolving on a later run with no
+changes in between) — every component's `pyproject.toml` sets
+`pythonpath = ["src"]` (plus `../../shared/src` for the seo-workbook pair)
+for exactly this reason, so tests never depend on the editable install
+actually resolving. The real Docker image installs non-editably in every
+case, which doesn't use .pth files and isn't affected either way.
 
 
 ## Commit Message Format

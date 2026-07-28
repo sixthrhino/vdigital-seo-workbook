@@ -42,3 +42,12 @@ packages = ["src/seo_workbook_common"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Explicit sys.path entry rather than relying solely on `pip install -e`:
+# hatchling's editable-install .pth resolution has proven flaky in this
+# environment even for a package installing itself (not just the
+# cross-package case mcp-server/agent already work around this same way) —
+# confirmed non-deterministic across otherwise-identical installs. This
+# sidesteps it entirely for tests; unaffected by how the real Docker image
+# installs this (a normal non-editable `pip install`, which doesn't use
+# .pth files).
+pythonpath = ["src"]

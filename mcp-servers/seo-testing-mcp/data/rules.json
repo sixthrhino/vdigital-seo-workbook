@@ -1,0 +1,374 @@
+{
+  "version": "2.0",
+  "categories": {
+    "Core SEO": {
+      "description": "Title tag and meta description — the most visible on-page SEO elements",
+      "optimizations": {
+        "Title Tag": {
+          "auto_checks": ["seo_check_title"],
+          "guided_questions": [
+            "Primary keyword and geo target (if applicable) are included",
+            "Brand name is appended at the end"
+          ]
+        },
+        "Meta Description": {
+          "auto_checks": ["seo_check_meta_description"],
+          "guided_questions": [
+            "Primary keyword and geo target (if applicable) are present",
+            "A clear CTA is included",
+            "Description accurately summarizes the page purpose"
+          ]
+        }
+      }
+    },
+    "Technical SEO": {
+      "description": "Robots, sitemaps, canonical, URL hygiene, page speed, caching, and link health",
+      "optimizations": {
+        "Robots.txt Check": {
+          "auto_checks": ["tech_check_robots_txt"],
+          "guided_questions": [
+            "New rules have been verified to target only intended paths",
+            "No critical content was accidentally blocked",
+            "Existing directives necessary for indexation remain intact"
+          ]
+        },
+        "AIO AI Crawler Directives": {
+          "auto_checks": ["tech_check_robots_txt"],
+          "guided_questions": [
+            "Documentation includes a record of old and new robots.txt content",
+            "New rules apply to individual AI crawlers (not just catch-all *)",
+            "Reference site checked (e.g., lemonlaws.com/robots.txt) for formatting guidance"
+          ]
+        },
+        "LLMs.txt Check": {
+          "auto_checks": ["tech_check_llms_txt"],
+          "guided_questions": [
+            "File includes site name, purpose, key topics/services",
+            "Key pages are listed with descriptive titles, clean URLs, and brief context",
+            "Language is plain and direct, written for machines not humans",
+            "llms-full.txt is linked if applicable"
+          ]
+        },
+        "XML Sitemaps": {
+          "auto_checks": ["tech_check_xml_sitemap", "tech_check_html_sitemap_footer"],
+          "guided_questions": [
+            "Sitemap includes only relevant, high-quality canonical URLs (status 200)",
+            "Irrelevant sections (categories, tags, author archives) are excluded",
+            "Sitemap has been submitted to Google Search Console and shows Success status"
+          ]
+        },
+        "Canonical Tags": {
+          "auto_checks": ["seo_check_canonical"],
+          "guided_questions": [
+            "Canonical was intentionally placed (not added by mistake)",
+            "The page it canonicalizes to is the primary version of that content"
+          ]
+        },
+        "URL Hygiene & Indexing": {
+          "auto_checks": ["tech_check_url_hygiene", "seo_check_canonical", "tech_check_noindex"],
+          "guided_questions": [
+            "URL contains the relevant keyword and removes stop words",
+            "If URL was changed, a 301 redirect from the old URL was implemented",
+            "Child pages were checked before changing any parent page URL",
+            "New URL was submitted for indexing after the change"
+          ]
+        },
+        "Page Speed Analysis": {
+          "auto_checks": ["tech_check_page_speed"],
+          "guided_questions": [
+            "Issues were flagged for the dev team with specific recommendations",
+            "Mobile scores were prioritized",
+            "Post-fix testing was completed to confirm improvement"
+          ]
+        },
+        "Internal Links to Redirects": {
+          "auto_checks": ["elements_check_internal_redirects"],
+          "guided_questions": [
+            "All updated internal links were verified to return status 200",
+            "Anchor text and surrounding content were not altered during URL updates"
+          ]
+        },
+        "NAP Information": {
+          "auto_checks": ["tech_check_nap"],
+          "guided_questions": [
+            "NAP formatting and branding is consistent across all site instances",
+            "NAP details exactly match the Google Business Profile"
+          ]
+        },
+        "Indexation Audits": {
+          "auto_checks": [],
+          "guided_questions": [
+            "All target non-indexed pages verified as legitimate via live render test",
+            "Indexing manually requested for all validated high-priority pages",
+            "Sitemap confirmed as submitted and processed in GSC"
+          ]
+        },
+        "Backlink QA & Analysis": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Full backlink profile pulled from Ahrefs, filtered for followed links and high spam scores",
+            "All identified links categorized by risk level: High, Medium, or Low",
+            "Anchor text distribution audited for over-optimized exact-match keywords",
+            "GSC checked for any manual action notices",
+            "All flagged links documented in a tracker"
+          ]
+        },
+        "Disavow Spammy Backlinks": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Disavow file follows correct syntax (one URL or domain per line with domain: prefix)",
+            "List is strictly limited to toxic or spammy links only (no high-quality backlinks removed)",
+            "File successfully uploaded to the correct property in GSC",
+            "Domain-level disavows used for widespread spam sources"
+          ]
+        },
+        "Caching Plugin (WP Rocket / LiteSpeed)": {
+          "auto_checks": ["tech_check_caching"],
+          "guided_questions": [
+            "Caching plugin (WP Rocket or LiteSpeed Cache) is confirmed active in the WordPress dashboard",
+            "Minification settings (CSS/JS) are enabled in the plugin",
+            "Caching was tested on the live site after configuration"
+          ]
+        },
+        "Image Compression (Imagify)": {
+          "auto_checks": ["elements_check_images"],
+          "guided_questions": [
+            "Imagify plugin is confirmed active in the WordPress dashboard",
+            "Bulk compression was run on existing images",
+            "New images are being auto-compressed on upload",
+            "Page speed was re-tested after compression to confirm improvement"
+          ]
+        },
+        "Fixed 404s & Broken URLs": {
+          "auto_checks": ["tech_check_url_batch"],
+          "guided_questions": [
+            "All fixed URLs were verified to return 200 in the tracking spreadsheet",
+            "301 redirects were implemented where URLs changed permanently",
+            "Internal links pointing to old URLs were updated to the new destinations"
+          ]
+        },
+        "New Page / URL Created": {
+          "auto_checks": ["tech_check_redirect"],
+          "guided_questions": [
+            "New page returns 200 and is accessible on the live site",
+            "Page has been submitted for indexing in Google Search Console",
+            "Page is linked to from at least one relevant internal page"
+          ]
+        }
+      }
+    },
+    "On-Page Content": {
+      "description": "Headings, images, links, schema, social metadata, maps, video, FAQ, and TOC",
+      "optimizations": {
+        "Metadata & Heading Structure": {
+          "auto_checks": ["seo_check_title", "seo_check_meta_description", "seo_check_h1", "seo_check_headings"],
+          "guided_questions": []
+        },
+        "H1 Tag": {
+          "auto_checks": ["seo_check_h1"],
+          "guided_questions": [
+            "H1 did not inadvertently change the nav or footer navigation label",
+            "H1 is consistent with H1 tags on similar page types across the site"
+          ]
+        },
+        "H2 / H3 / H4 Tags": {
+          "auto_checks": ["seo_check_headings"],
+          "guided_questions": [
+            "Subheadings naturally incorporate supporting, LSI, and geo keywords",
+            "Heading text accurately describes the section that follows"
+          ]
+        },
+        "Image Alt Text & Optimization": {
+          "auto_checks": ["elements_check_images"],
+          "guided_questions": [
+            "Alt text describes what is actually in the image (not keyword stuffed)",
+            "Image filenames are descriptive (not image01.jpg or screenshot.png)"
+          ]
+        },
+        "Internal Linking & Anchor Text": {
+          "auto_checks": ["elements_check_links"],
+          "guided_questions": [
+            "Links are distributed naturally throughout the content (not clustered)",
+            "At least one link points to a high-value 'money page' (service/product)",
+            "Link styling is consistent and clearly identifiable as clickable"
+          ]
+        },
+        "External Linking": {
+          "auto_checks": ["elements_check_links"],
+          "guided_questions": [
+            "No external links point to Wikipedia, forums, or competitor websites",
+            "All external links enhance the trustworthiness and EEAT profile of the page",
+            "Existing external links that don't enhance EEAT have rel='nofollow' applied"
+          ]
+        },
+        "Schema Markup": {
+          "auto_checks": ["seo_check_schema"],
+          "guided_questions": [
+            "Schema type selected is appropriate for the page (Article, FAQ, Product, HowTo)",
+            "Schema was verified using the Google Rich Results Test with zero errors",
+            "FAQ schema content (if used) matches the visible text on the page exactly"
+          ]
+        },
+        "Social Metadata (OG & Twitter)": {
+          "auto_checks": ["seo_check_og_twitter"],
+          "guided_questions": [
+            "Social titles and descriptions have slight variation from main title/meta",
+            "OG and Twitter tags were updated via the Social tab in AIOSEO or Yoast"
+          ]
+        },
+        "Google Maps Embedding": {
+          "auto_checks": ["elements_check_google_maps"],
+          "guided_questions": [
+            "Iframe uses the verified Google Business Profile link (not a generic address)",
+            "Map was verified on the live site and loads/displays the correct location"
+          ]
+        },
+        "YouTube Video Embedding": {
+          "auto_checks": ["elements_check_youtube"],
+          "guided_questions": [
+            "Video is embedded on a relevant service, blog, or location page",
+            "Page includes a keyword-informed title, description, or transcript",
+            "Embedded video loads correctly on mobile"
+          ]
+        },
+        "Section Design & FAQ Content": {
+          "auto_checks": ["elements_check_faq"],
+          "guided_questions": [
+            "FAQ answers are concise (40-60 words), direct, and written for search intent",
+            "FAQ section is placed after core content is established on the page",
+            "No keyword stuffing in FAQ content — written naturally and conversationally"
+          ]
+        },
+        "TOC (Table of Contents)": {
+          "auto_checks": ["elements_check_toc"],
+          "guided_questions": [
+            "TOC is updated to reflect all current sections including new or renamed ones",
+            "Labels are short, descriptive, and match exact section heading names"
+          ]
+        },
+        "Formatting, Structure & Layout": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Paragraphs are structured properly for readability",
+            "Lists, bullets, or bold text are used to break up walls of text",
+            "Page mimics the layout and structure of other pages on the site",
+            "Content renders correctly on mobile (checked via DevTools emulator)",
+            "A clear CTA button or link is visible above the fold or after key sections"
+          ]
+        }
+      }
+    },
+    "AIO / Deep": {
+      "description": "AI-optimized content: TLDR, content reformatting, LSI keywords, geo keywords",
+      "optimizations": {
+        "TLDR / AI Takeaways": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Summary is front-loaded at the top of the page",
+            "Content accurately distills the main points into a concise overview",
+            "Uses scannable elements (bullets or blockquote) for readability",
+            "No literal 'TLDR' heading used — framed appropriately for the client"
+          ]
+        },
+        "Content Reformatting": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Large paragraphs converted into concise bullet points",
+            "A brief introductory summary is placed at the top of the page",
+            "Critical information is front-loaded in the early content",
+            "Clear H2/H3 subheadings define content hierarchy",
+            "No original meaning or core information was lost or altered"
+          ]
+        },
+        "LSI Keywords": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Primary keyword is supported by conceptually related LSI terms",
+            "LSI keywords integrated naturally and not keyword stuffed",
+            "LSI terms sourced from PAA sections or Related Searches in SERPs"
+          ]
+        },
+        "Geo Keywords": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Geo keywords are relevant and applicable to this specific page",
+            "Geographic identifiers include specific locations (city, county, state, neighborhood)",
+            "'Near me' is NOT used as a primary geo keyword"
+          ]
+        }
+      }
+    },
+    "Content Production (CP)": {
+      "description": "Brand, geo-targeting, service accuracy, CTA, website consistency, and grammar",
+      "optimizations": {
+        "Brand Integrity": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Client name is spelled exactly as it appears in the Brand Guide",
+            "Writing style (tone, POV, formatting) follows all Brand Guide Writing Rules",
+            "'About the Client' sections align with the approved brand story"
+          ]
+        },
+        "Geo-Targeting & Service Areas": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Content aligns with the primary geo-targeting (State/Region)",
+            "All cities mentioned are on the 'Cities Served' list",
+            "No mentions of geolocations or service areas not found on the client's website"
+          ]
+        },
+        "Service & Product Accuracy": {
+          "auto_checks": [],
+          "guided_questions": [
+            "All products/services mentioned are currently offered on the client's website",
+            "Content makes zero claims about services the client does not provide",
+            "No factual inaccuracies regarding pricing, warranties, or specific features",
+            "AI-generated content has been reviewed for hallucinations"
+          ]
+        },
+        "CTA Structure & Alignment": {
+          "auto_checks": [],
+          "guided_questions": [
+            "CTA follows the exact structure required by the Brand Guide",
+            "Phone number in the CTA matches the contact info on the live site",
+            "The 'Ask' is appropriate for the content type (no 'Buy Now' on a blog)",
+            "A final CTA exists at the end of the page/post"
+          ]
+        },
+        "Website & Guide Consistency": {
+          "auto_checks": [],
+          "guided_questions": [
+            "No contradictions exist between new content and the Brand Guide",
+            "No inconsistencies between the content and the existing live website",
+            "External links (if any) do not lead to competitor sites",
+            "Customer logic check passed: content flows naturally to the homepage"
+          ]
+        },
+        "Grammar, Syntax & Polish": {
+          "auto_checks": ["content_check_grammar"],
+          "guided_questions": [
+            "Zero spelling or grammatical errors",
+            "No repetitive sentence starters (e.g., 3 paragraphs starting with 'The...')",
+            "Content is written in the correct POV per the Brand Guide",
+            "Content was reviewed with Grammarly or Hemingway as a baseline"
+          ]
+        }
+      }
+    },
+    "Off-Site": {
+      "description": "YouTube channel optimization",
+      "optimizations": {
+        "YouTube Channel Optimization": {
+          "auto_checks": [],
+          "guided_questions": [
+            "Video titles are under 60 characters with primary keyword near the front",
+            "Descriptions have keyword-rich content and essential links in first 2-3 lines",
+            "Video chapters are implemented with accurate timestamps",
+            "Auto-captions are enabled and edited for accuracy",
+            "VideoObject schema is deployed on all website pages with embedded videos"
+          ]
+        }
+      }
+    }
+  }
+}

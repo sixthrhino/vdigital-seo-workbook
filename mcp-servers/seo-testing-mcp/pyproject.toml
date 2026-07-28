@@ -1,0 +1,53 @@
+[project]
+name = "seo-testing-mcp"
+version = "0.1.0"
+description = "FastMCP server exposing ~50 live-site SEO/content/technical QA checks, migrated from vdigital-testing-agent."
+requires-python = ">=3.11"
+dependencies = [
+    # Pinned below 2: mcp 2.0.0 (published 2026-07-28) changed APIs this
+    # service's bundled mcp.server.fastmcp usage depends on — see the same
+    # pin in seo-workbook-agent's pyproject.toml for the concrete breakage.
+    "mcp[cli]>=1.9.0,<2",
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.0",
+    "uvicorn[standard]>=0.30.0",
+    "google-cloud-storage>=2.16.0",
+    "gspread>=6.0.0",
+    "google-auth>=2.29.0",
+    "google-genai>=2.8.0",
+    # Not in the original requirements.txt but actually imported by app.py
+    # (load_dotenv) — was only working there as an unlisted transitive
+    # dependency of something else; listed explicitly here instead.
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+]
+
+[project.scripts]
+seo-testing-mcp = "seo_testing_mcp.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/seo_testing_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: marks tests requiring a live network connection (deselect with -m \"not integration\")",
+]
+# Explicit sys.path entry rather than relying solely on `pip install -e`:
+# hatchling's editable-install .pth resolution has proven non-deterministic
+# in this environment (confirmed directly — same install steps, same
+# machine, worked once then silently stopped resolving). Sidesteps it
+# entirely for tests; unaffected by how the real Docker image installs
+# this (a normal non-editable `pip install`, which doesn't use .pth files).
+pythonpath = ["src"]
