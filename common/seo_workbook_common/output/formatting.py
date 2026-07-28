@@ -1,7 +1,21 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 _SINGLE_VALUE_TOUCHPOINTS = {"title_tag", "meta_description", "h1_tag"}
 _INTERNAL_LINK_TOUCHPOINTS = {"internal_linking_to_other_pages_homepage", "internal_linking_to_target_page"}
+
+
+def format_month(month: str) -> str:
+    """Render a session's "YYYY-MM" month string as "June 2026" for
+    display. Falls back to the raw value on anything that doesn't match —
+    PlanSession already validates this shape going in, so that should only
+    happen for legacy/malformed data.
+    """
+    try:
+        return datetime.strptime(month, "%Y-%m").strftime("%B %Y")
+    except ValueError:
+        return month
 
 
 def format_item(item: dict[str, str], touchpoint_id: str) -> str:

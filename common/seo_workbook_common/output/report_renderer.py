@@ -7,7 +7,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..best_practices import BestPracticeCatalog
 from ..models.plan_session import PlanSession
-from .formatting import format_item
+from .formatting import format_item, format_month
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -16,6 +16,7 @@ _env = Environment(
     autoescape=select_autoescape(["html", "jinja"]),
 )
 _env.filters["format_item"] = format_item
+_env.filters["format_month"] = format_month
 
 
 def _touchpoint_name_resolver(catalog: BestPracticeCatalog | None) -> Callable[[str], str]:

@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>{{ session.client }} — SEO Plan — {{ session.month }}</title>
+<title>{{ session.client }} — SEO Plan — {{ session.month | format_month }}</title>
 <style>
   body { font-family: Helvetica, Arial, sans-serif; font-size: 14px; color: #1a1a1a;
          max-width: 960px; margin: 0 auto; padding: 28px 20px; }
@@ -33,7 +33,7 @@
 <body>
   <h1>{{ session.client }} — SEO Optimization Plan</h1>
   <div class="meta">
-    {{ session.month }}
+    {{ session.month | format_month }}
     · <span class="status {{ session.status.value }}">{{ session.status.value }}</span>
     {% if session.requested_by %}· requested by {{ session.requested_by }}{% endif %}
   </div>

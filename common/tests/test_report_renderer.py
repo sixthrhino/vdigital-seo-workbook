@@ -71,6 +71,14 @@ def test_render_summary_html_without_catalog_falls_back_to_touchpoint_id(sample_
     assert "title_tag" in html
 
 
+def test_render_summary_html_shows_a_human_readable_month(sample_session):
+    # session_id ("kyz-2026-06") legitimately contains the raw "2026-06"
+    # substring in the footer, so this only checks the human-readable form
+    # is present — not that the raw form is absent everywhere.
+    html = render_summary_html(sample_session)
+    assert "June 2026" in html
+
+
 def test_render_summary_html_includes_print_media_rule(sample_session):
     # Delivery is: open the report link in a browser, print to PDF from
     # there — no server-side PDF generation — so the print stylesheet is

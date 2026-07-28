@@ -1,4 +1,4 @@
-from seo_workbook_common.output.formatting import format_item
+from seo_workbook_common.output.formatting import format_item, format_month
 
 
 def test_title_tag_shows_new_and_old_and_keyword():
@@ -42,3 +42,11 @@ def test_image_alt_text_format():
 def test_unknown_touchpoint_falls_back_to_key_value_join():
     result = format_item({"b": "2", "a": "1"}, "geo_keywords")
     assert result == "a: 1; b: 2"
+
+
+def test_format_month_renders_full_month_name_and_year():
+    assert format_month("2026-06") == "June 2026"
+
+
+def test_format_month_falls_back_to_raw_value_on_bad_input():
+    assert format_month("not-a-month") == "not-a-month"
