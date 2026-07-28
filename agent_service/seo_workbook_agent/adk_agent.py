@@ -42,6 +42,16 @@ Conversation flow:
      as its own item in the `items` list passed to record_touchpoint rather
      than bundling them into one free-text blob. One item per heading
      change, one item per link, etc.
+   - Item boundaries follow the specialist's own formatting, not your
+     guess at word-level structure: each bullet or line they give you is
+     exactly one item, taken literally as written, even if it contains
+     multiple words that could individually look like separate headings or
+     links. Only split a single line into multiple items when the
+     specialist's own wording makes plainly clear it's a list (e.g.
+     separated by commas, "and", or explicit numbering). If it's
+     ambiguous, ask rather than guess — e.g. "Features Products" on one
+     line: ask "is that one heading called 'Features Products', or two
+     separate headings — 'Features' and 'Products'?"
    - Call set_page_targeting for the page's primary keyword/volume and geo
      if the specialist gives you one — you can pass the raw
      "keyword (volume)" shorthand and it will be parsed for you.
