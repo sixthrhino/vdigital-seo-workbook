@@ -4,7 +4,7 @@ import pytest
 
 from seo_workbook_mcp.app import create_app
 
-from conftest import CSV_PATH
+from conftest import CSV_PATH, FakeMongoCollection
 from seo_workbook_mcp.config import McpSettings
 
 
@@ -21,6 +21,33 @@ async def test_start_session_duplicate_raises(mcp_app):
         await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
         with pytest.raises(ToolError):
             await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+
+
+async def test_start_session_does_not_overwrite_a_record_that_only_survives_in_mongo():
+    # Simulates a restart: the session was created and worked on by one
+    # mcp-server process, that process's in-memory SessionStore is gone,
+    # and start_session is called again for the same client/month. Without
+    # the Mongo-aware duplicate check, this would silently replace_one()
+    # over the existing record via _persist(), discarding its pages.
+    shared_mongo_collection = FakeMongoCollection()
+    settings = McpSettings(best_practices_csv_path=str(CSV_PATH), mongo_uri="mongodb://fake-uri")
+
+    app_before_restart = create_app(settings, mongo_collection_factory=lambda: shared_mongo_collection)
+    async with Client(app_before_restart) as client:
+        session_id = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session_id.data["session_id"]
+        await client.call_tool("add_page", {"session_id": session_id, "url": "https://kyz.com/a/"})
+
+    app_after_restart = create_app(settings, mongo_collection_factory=lambda: shared_mongo_collection)
+    async with Client(app_after_restart) as client:
+        with pytest.raises(ToolError, match="already exists"):
+            await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+
+    # The original record — including the page recorded before the
+    # "restart" — must be untouched.
+    saved = shared_mongo_collection.documents[session_id]
+    assert len(saved["pages"]) == 1
+    assert saved["pages"][0]["url"] == "https://kyz.com/a/"
 
 
 async def test_add_page_appends_to_session(mcp_app):

@@ -12,7 +12,7 @@ from seo_workbook_common.storage import build_mongo_collection, save_session
 from seo_workbook_common.validators import validate_touchpoint
 
 from ..config import McpSettings
-from ..session_store import SessionStore
+from ..session_store import SessionNotFoundError, SessionStore
 
 
 def _session_id(client: str, month: str) -> str:
@@ -52,10 +52,33 @@ def register(
 
         `month` must be "YYYY-MM" (e.g. "2026-06"). Returns the new session
         with a generated session_id — use that id in every subsequent call.
-        Raises if a session for this client/month already exists; call
-        get_session with the same id to resume it instead.
+        Raises if a session for this client/month already exists (whether
+        still in memory or only in MongoDB, e.g. after an mcp-server
+        restart) — call get_session with the same id to resume it instead
+        of starting over, since starting over would overwrite the existing
+        record's pages/touchpoints.
         """
         session_id = _session_id(client, month)
+
+        # store.create() alone only catches an in-memory collision — after
+        # a restart this instance's memory is empty even though MongoDB
+        # already has the record, and create()+_persist() would silently
+        # replace_one() over it, discarding everything recorded so far.
+        # Skipped when mongo_uri isn't configured at all so that case still
+        # fails with _persist()'s clearer "not configured" error below,
+        # rather than a confusing one from an unconfigured Mongo client.
+        if settings.mongo_uri:
+            try:
+                store.get(session_id)
+            except SessionNotFoundError:
+                pass
+            else:
+                raise ValueError(
+                    f"A session already exists for client={client!r}, month={month!r} "
+                    f"(session_id={session_id!r}). Call get_session({session_id!r}) to resume "
+                    "it instead of starting over."
+                )
+
         session = PlanSession(session_id=session_id, client=client, month=month, requested_by=requested_by)
         store.create(session)
         _persist(session)
