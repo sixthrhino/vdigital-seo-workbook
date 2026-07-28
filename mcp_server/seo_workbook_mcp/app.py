@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from seo_workbook_common.best_practices import load_catalog
 from seo_workbook_common.logging import configure_logging
 from seo_workbook_common.output import build_sheets_service, build_storage_client
+from seo_workbook_common.storage import build_mongo_collection
 
 from .config import McpSettings, get_mcp_settings
 from .session_store import SessionStore
@@ -42,10 +43,18 @@ def create_app(
 
     mcp = FastMCP("seo-workbook-mcp")
     catalog = load_catalog(_resolve_csv_path(settings.best_practices_csv_path))
-    store = SessionStore()
+
+    # Resolved once and shared by SessionStore and session_tools so both
+    # ends of the load/save round-trip (resuming a session that fell out of
+    # memory vs. persisting one) point at the exact same collection.
+    def _default_mongo_collection_factory() -> Any:
+        return build_mongo_collection(settings.mongo_uri, settings.mongo_database, settings.mongo_collection)
+
+    get_mongo_collection = mongo_collection_factory or _default_mongo_collection_factory
+    store = SessionStore(mongo_collection_factory=get_mongo_collection)
 
     catalog_tools.register(mcp, catalog)
-    session_tools.register(mcp, catalog, store, settings, mongo_collection_factory=mongo_collection_factory)
+    session_tools.register(mcp, catalog, store, settings, mongo_collection_factory=get_mongo_collection)
     output_tools.register(
         mcp,
         catalog,

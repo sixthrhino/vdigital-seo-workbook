@@ -10,7 +10,8 @@ CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "organic_qa_checklist.
 
 class FakeMongoCollection:
     """Minimal in-memory stand-in for a pymongo Collection — just enough of
-    `replace_one`'s upsert-by-filter behavior for finalize_session's tests.
+    `replace_one`'s upsert-by-filter behavior for finalize_session's tests,
+    plus `find_one` for SessionStore's Mongo-fallback (load_session).
     """
 
     def __init__(self):
@@ -18,6 +19,9 @@ class FakeMongoCollection:
 
     def replace_one(self, filter, replacement, upsert=False):
         self.documents[filter["_id"]] = replacement
+
+    def find_one(self, filter):
+        return self.documents.get(filter["_id"])
 
 
 @pytest.fixture

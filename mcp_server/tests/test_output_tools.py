@@ -94,6 +94,43 @@ async def test_render_session_report_uploads_and_returns_a_short_share_link(mcp_
     assert stored["blob_name"] == "KYZ-2026-06-seo-plan.html"
 
 
+async def test_render_session_report_works_after_a_simulated_instance_restart():
+    # Reproduces the scenario that motivated SessionStore's Mongo fallback:
+    # a session is created and finalized by one mcp-server process, that
+    # process's in-memory SessionStore is gone (restart/redeploy/a
+    # different session-affinity-pinned instance), and the report is
+    # requested again later. Two separate create_app() calls (so two
+    # separate SessionStores) sharing one Mongo collection stand in for
+    # "before" and "after" the restart.
+    shared_mongo_collection = FakeMongoCollection()
+    fake_storage_client = _FakeStorageClient()
+    fake_report_tokens = FakeReportTokensCollection()
+    settings = McpSettings(
+        best_practices_csv_path=str(CSV_PATH),
+        reports_bucket="test-reports-bucket",
+        mongo_uri="mongodb://fake-uri",
+        agent_public_url="https://agent.example.com",
+    )
+
+    app_before_restart = create_app(settings, mongo_collection_factory=lambda: shared_mongo_collection)
+    async with Client(app_before_restart) as client:
+        session_id = await _start_session_with_a_touchpoint(client, client_name="KYZ", month="2026-06")
+        await client.call_tool("finalize_session", {"session_id": session_id})
+
+    app_after_restart = create_app(
+        settings,
+        storage_client_factory=lambda: fake_storage_client,
+        mongo_collection_factory=lambda: shared_mongo_collection,
+        report_tokens_collection_factory=lambda: fake_report_tokens,
+    )
+    async with Client(app_after_restart) as client:
+        result = await client.call_tool("render_session_report", {"session_id": session_id})
+
+    assert result.data["filename"] == "KYZ-2026-06-seo-plan.html"
+    blob = fake_storage_client.bucket_instance.blobs["KYZ-2026-06-seo-plan.html"]
+    assert "KYZ" in blob.uploaded_content
+
+
 async def test_render_session_report_unknown_session_raises(mcp_app_with_fake_storage):
     app, _, _ = mcp_app_with_fake_storage
     async with Client(app) as client:
