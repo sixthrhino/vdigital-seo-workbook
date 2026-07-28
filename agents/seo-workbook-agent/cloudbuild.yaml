@@ -1,0 +1,7 @@
+# Submitted from the repo root (`gcloud builds submit . --config=agents/seo-workbook-agent/cloudbuild.yaml ...`)
+# so the Dockerfile can COPY the shared/ package in.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "agents/seo-workbook-agent/Dockerfile", "-t", "$_IMAGE", "."]
+images:
+  - "$_IMAGE"

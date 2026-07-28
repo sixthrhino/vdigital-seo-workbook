@@ -15,8 +15,10 @@ from .config import McpSettings, get_mcp_settings
 from .session_store import SessionStore
 from .tools import catalog_tools, import_tools, output_tools, session_tools
 
-# mcp_server/seo_workbook_mcp/app.py -> repo root
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# mcp-servers/seo-workbook-mcp/src/seo_workbook_mcp/app.py -> this
+# component's own root (mcp-servers/seo-workbook-mcp/), where data/ lives —
+# not the monorepo root, since data/ is this component's own, not shared.
+_COMPONENT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _resolve_csv_path(raw_path: str) -> Path:
@@ -24,9 +26,10 @@ def _resolve_csv_path(raw_path: str) -> Path:
     if path.is_file():
         return path
     # Falls back to a path anchored on this file's location (rather than
-    # cwd) so the default app works the same whether it's imported from the
-    # repo root, from mcp_server/, or from inside a container.
-    fallback = _REPO_ROOT / raw_path
+    # cwd) so the default app works the same whether it's imported from
+    # this component's own root, from its seo_workbook_mcp/ package dir, or
+    # from inside a container.
+    fallback = _COMPONENT_ROOT / raw_path
     if fallback.is_file():
         return fallback
     raise FileNotFoundError(f"best_practices_csv_path not found: tried {path} and {fallback}")

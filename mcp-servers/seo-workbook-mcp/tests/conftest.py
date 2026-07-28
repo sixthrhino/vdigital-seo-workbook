@@ -5,7 +5,7 @@ import pytest
 from seo_workbook_mcp.app import create_app
 from seo_workbook_mcp.config import McpSettings
 
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "organic_qa_checklist.csv"
+CSV_PATH = Path(__file__).resolve().parents[1] / "data" / "organic_qa_checklist.csv"
 
 
 class FakeMongoCollection:

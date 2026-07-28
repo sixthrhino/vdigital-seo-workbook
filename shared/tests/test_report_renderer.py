@@ -7,7 +7,7 @@ from seo_workbook_common.keywords import parse_keyword_target
 from seo_workbook_common.models.plan_session import PlanSession, TouchpointAnswer, ValidationResult
 from seo_workbook_common.output.report_renderer import render_summary_html
 
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "organic_qa_checklist.csv"
+CSV_PATH = Path(__file__).resolve().parents[2] / "mcp-servers" / "seo-workbook-mcp" / "data" / "organic_qa_checklist.csv"
 
 
 @pytest.fixture

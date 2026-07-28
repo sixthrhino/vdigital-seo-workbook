@@ -48,7 +48,7 @@ _default_compute_sa() {
 deploy_mcp() {
   echo "==> Building mcp-server image..."
   gcloud builds submit . \
-    --config=mcp_server/cloudbuild.yaml \
+    --config=mcp-servers/seo-workbook-mcp/cloudbuild.yaml \
     --substitutions="_IMAGE=${MCP_IMAGE}" \
     --project "${PROJECT}"
 
@@ -144,7 +144,7 @@ deploy_agent() {
 
   echo "==> Building agent-service image..."
   gcloud builds submit . \
-    --config=agent_service/cloudbuild.yaml \
+    --config=agents/seo-workbook-agent/cloudbuild.yaml \
     --substitutions="_IMAGE=${AGENT_IMAGE}" \
     --project "${PROJECT}"
 

@@ -8,3 +8,7 @@
 .gitignore
 .env
 *.md
+# Legacy workbook JSON exports (data/legacy_imports/*.json) are a one-time
+# import artifact for you to inspect/mongoimport locally — not something
+# the running service needs at runtime.
+**/data/legacy_imports/

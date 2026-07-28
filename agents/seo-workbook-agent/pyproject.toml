@@ -5,14 +5,15 @@ description = "ADK-based conversational agent for gathering monthly SEO plans, e
 requires-python = ">=3.11"
 # seo-workbook-common isn't listed here since it's not published anywhere —
 # resolved via pytest's `pythonpath` setting below rather than an editable
-# install (see mcp_server/pyproject.toml for why: editable-install .pth
-# resolution was flaky in this environment with multiple locally-path
-# packages sharing one venv). The Docker build does a normal non-editable
-# `pip install` from a repo-root context instead, which isn't affected.
+# install (see mcp-servers/seo-workbook-mcp/pyproject.toml for why:
+# editable-install .pth resolution was flaky in this environment with
+# multiple locally-path packages sharing one venv). The Docker build does
+# a normal non-editable `pip install` from a repo-root context instead,
+# which isn't affected.
 # google-cloud-storage/pymongo/jinja2 are seo-workbook-common's `output`/
 # `storage` extras (used by the /reports/{token} redirect route) — listed
 # again here directly for the same reason; keep in sync with
-# common/pyproject.toml. jinja2 itself is unused here, but importing
+# shared/pyproject.toml. jinja2 itself is unused here, but importing
 # anything from seo_workbook_common.output runs that package's __init__,
 # which imports report_renderer (jinja2) regardless of which submodule is
 # actually needed.
@@ -43,9 +44,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["seo_workbook_agent"]
+packages = ["src/seo_workbook_agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-pythonpath = ["../common", "."]
+pythonpath = ["../../shared/src", "src"]

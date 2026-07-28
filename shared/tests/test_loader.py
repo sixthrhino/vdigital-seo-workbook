@@ -4,7 +4,7 @@ import pytest
 
 from seo_workbook_common.best_practices.loader import load_catalog, slugify
 
-CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "organic_qa_checklist.csv"
+CSV_PATH = Path(__file__).resolve().parents[2] / "mcp-servers" / "seo-workbook-mcp" / "data" / "organic_qa_checklist.csv"
 
 
 def test_csv_data_file_exists():

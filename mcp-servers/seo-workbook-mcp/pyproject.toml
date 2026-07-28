@@ -4,14 +4,15 @@ version = "0.1.0"
 description = "FastMCP server exposing deterministic SEO best-practices catalog, session, and validation tools."
 requires-python = ">=3.11"
 # seo-workbook-common isn't listed here since it's not published anywhere —
-# install both with `pip install -e ../common -e .` (the Docker build does
-# the equivalent from a repo-root build context so it can COPY common/ in).
+# install both with `pip install -e ../../shared -e .` (the Docker build
+# does the equivalent from a repo-root build context so it can COPY
+# shared/ in).
 # jinja2/google-api-python-client/google-auth/google-cloud-storage are
 # seo-workbook-common's `output` extra, pymongo is its `storage` extra, and
 # gspread is its `legacy_import` extra (used by import_legacy_workbook to
 # read a client's legacy workbook off Google Sheets) — listed again here
 # directly since nothing resolves extras transitively across the
-# pythonpath seam described above; keep in sync with common/pyproject.toml.
+# pythonpath seam described above; keep in sync with shared/pyproject.toml.
 dependencies = [
     "fastmcp>=3.0",
     "jinja2>=3.1",
@@ -36,7 +37,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["seo_workbook_mcp"]
+packages = ["src/seo_workbook_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -47,4 +48,4 @@ asyncio_mode = "auto"
 # present in site-packages but inconsistently picked up across runs. This
 # sidesteps it entirely; unaffected by how the real Docker image installs
 # these (a normal non-editable `pip install`, which doesn't use .pth files).
-pythonpath = ["../common", "."]
+pythonpath = ["../../shared/src", "src"]
