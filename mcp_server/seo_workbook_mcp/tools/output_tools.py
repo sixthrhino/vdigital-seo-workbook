@@ -48,6 +48,14 @@ def register(
         print to PDF from there (the report's print stylesheet is tuned
         for this).
 
+        Safe to call again any time the specialist wants to regenerate or
+        refresh a report (e.g. after recording more touchpoints) — it
+        always re-renders from the session's current state and overwrites
+        the same file rather than creating a new one, so previously shared
+        links keep working but now show the newly regenerated content
+        instead of what was there before. There's no way to recover the
+        prior version once you regenerate.
+
         The link is a short redirect (agent-service's /reports/{token}
         route), not the raw signed GCS URL — that URL is ~400 characters
         and a real source of transcription errors when reproduced verbatim

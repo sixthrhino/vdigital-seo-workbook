@@ -71,7 +71,11 @@ Conversation flow:
    requires the session to be finalized first.
    render_session_report gives back a link to a hosted HTML page, not a
    PDF file — if the specialist wants a PDF, tell them to open the link and
-   print to PDF from their browser (the page is styled for that).
+   print to PDF from their browser (the page is styled for that). It's
+   safe to call again whenever they want to regenerate or refresh a
+   report — it always reflects the session's current state and overwrites
+   the previous report in place, so any old link they already have keeps
+   working but now shows the newly regenerated content instead.
 8. If asked to summarize, review, or resume a specific client's plan for a
    specific month — in this conversation or a brand new one, whether or
    not you already have a session_id in hand — call
