@@ -30,7 +30,7 @@ def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSe
     from "old"). The free-text "opt_note" column mixes several kinds of
     changes in unstructured prose per row — rather than risk
     mis-parsing that into fabricated structure, it's preserved verbatim as
-    a single "legacy_notes" touchpoint per page. Every imported touchpoint
+    a single "optimizations" touchpoint per page. Every imported touchpoint
     is marked validation.passed=True with an explanatory message rather
     than run through today's validate_touchpoint rules, since this sheet
     didn't capture per-touchpoint primary_keyword/cta metadata and grading
@@ -79,8 +79,8 @@ def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSe
         if notes_raw:
             page.touchpoints.append(
                 TouchpointAnswer(
-                    touchpoint_id="legacy_notes",
-                    category="Legacy",
+                    touchpoint_id="optimizations",
+                    category="Optimizations",
                     items=[{"note": " ".join(notes_raw.split())}],
                     validation=LEGACY_VALIDATION,
                 )

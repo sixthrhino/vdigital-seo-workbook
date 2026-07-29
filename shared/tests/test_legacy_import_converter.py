@@ -74,7 +74,7 @@ def test_build_session_from_rows_skips_unchanged_or_placeholder_values():
     assert page.get_touchpoint("h1_tag") is None
 
 
-def test_build_session_from_rows_preserves_opt_note_as_legacy_notes():
+def test_build_session_from_rows_preserves_opt_note_as_optimizations_touchpoint():
     rows = [
         {
             "url": "https://kyz.com/a/",
@@ -91,8 +91,9 @@ def test_build_session_from_rows_preserves_opt_note_as_legacy_notes():
     ]
     session = build_session_from_rows("KYZ", "2025-10", rows)
     page = session.pages[0]
-    notes = page.get_touchpoint("legacy_notes")
+    notes = page.get_touchpoint("optimizations")
     assert notes is not None
+    assert notes.category == "Optimizations"
     assert notes.items[0]["note"] == "Deep Optimizations: added internal link to homepage."
     assert notes.validation.passed is True
 

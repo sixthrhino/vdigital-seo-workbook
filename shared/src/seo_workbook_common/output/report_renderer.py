@@ -6,7 +6,7 @@ from typing import Callable
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..best_practices import BestPracticeCatalog
-from ..models.plan_session import Page, PlanSession
+from ..models.plan_session import Page, PlanSession, TouchpointAnswer
 from .formatting import format_item, format_month, format_old_new
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -25,8 +25,17 @@ _env.filters["format_old_new"] = format_old_new
 _TABLE_DEDICATED_TOUCHPOINTS = {"title_tag", "meta_description", "h1_tag"}
 
 
+# touchpoint_ids that exist outside the best-practices catalog ("optimizations"
+# is written by legacy_import/converter.py, never by record_touchpoint) —
+# given a fixed display name here since catalog.get() has nothing to resolve
+# them to and would otherwise fall back to the raw, unreadable id.
+_NON_CATALOG_TOUCHPOINT_NAMES = {"optimizations": "Optimizations"}
+
+
 def _touchpoint_name_resolver(catalog: BestPracticeCatalog | None) -> Callable[[str], str]:
     def resolve(touchpoint_id: str) -> str:
+        if touchpoint_id in _NON_CATALOG_TOUCHPOINT_NAMES:
+            return _NON_CATALOG_TOUCHPOINT_NAMES[touchpoint_id]
         if catalog is None:
             return touchpoint_id
         try:
@@ -48,13 +57,24 @@ def render_summary_html(session: PlanSession, catalog: BestPracticeCatalog | Non
     return template.render(session=session, touchpoint_name=_touchpoint_name_resolver(catalog))
 
 
+def _optimization_display(tp: TouchpointAnswer, resolve_name: Callable[[str], str]) -> str:
+    if tp.touchpoint_id == "optimizations":
+        # The bare name ("Optimizations") says nothing on its own — unlike
+        # every other touchpoint here, there's no dedicated column showing
+        # this one's actual content anywhere else in the table, so show
+        # the real imported text instead of just its label.
+        notes = [item.get("note", "") for item in tp.items if item.get("note")]
+        return "; ".join(notes) if notes else resolve_name(tp.touchpoint_id)
+    return resolve_name(tp.touchpoint_id)
+
+
 def _page_table_row(page: Page, resolve_name: Callable[[str], str]) -> dict:
     keyword = page.keyword_target.keyword if page.keyword_target else ""
     volume = page.keyword_target.search_volume if page.keyword_target else None
     keyword_display = f"{keyword} ({volume})" if keyword and volume is not None else keyword
 
     optimizations = [
-        resolve_name(tp.touchpoint_id) for tp in page.touchpoints
+        _optimization_display(tp, resolve_name) for tp in page.touchpoints
         if tp.touchpoint_id not in _TABLE_DEDICATED_TOUCHPOINTS
     ]
 

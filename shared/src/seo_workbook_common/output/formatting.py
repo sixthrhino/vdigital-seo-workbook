@@ -52,6 +52,13 @@ def format_item(item: dict[str, str], touchpoint_id: str) -> str:
             alt += f" (was: {item['old_value']})"
         return alt
 
+    if touchpoint_id == "optimizations":
+        # A legacy-workbook import's free-text "what was done" cell,
+        # preserved verbatim (see legacy_import/converter.py) rather than
+        # parsed into fabricated structure — there's no old/new pairing or
+        # other structured fields to show alongside it, just the note.
+        return item.get("note", "")
+
     return "; ".join(f"{k}: {v}" for k, v in sorted(item.items()))
 
 

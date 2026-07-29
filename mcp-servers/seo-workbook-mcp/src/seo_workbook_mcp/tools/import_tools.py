@@ -57,7 +57,7 @@ def register(
 
         Only the explicit Old/New Title Tag, Meta Description, and H1
         columns become real touchpoints — the free-text "what was done"
-        column is preserved verbatim as a single legacy_notes touchpoint
+        column is preserved verbatim as a single "optimizations" touchpoint
         per page rather than parsed into fabricated structure. See
         seo_workbook_common.legacy_import.converter for the full rationale.
         """

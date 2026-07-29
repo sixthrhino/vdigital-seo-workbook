@@ -44,6 +44,11 @@ def test_unknown_touchpoint_falls_back_to_key_value_join():
     assert result == "a: 1; b: 2"
 
 
+def test_optimizations_touchpoint_shows_the_raw_note_verbatim():
+    result = format_item({"note": "Core Optimizations: Title Tag, Meta Description"}, "optimizations")
+    assert result == "Core Optimizations: Title Tag, Meta Description"
+
+
 def test_format_month_renders_full_month_name_and_year():
     assert format_month("2026-06") == "June 2026"
 

@@ -189,3 +189,38 @@ def test_render_page_table_html_no_pages_shows_empty_state():
 def test_render_page_table_html_includes_print_media_rule(sample_session):
     html = render_page_table_html(sample_session)
     assert "@media print" in html
+
+
+def test_render_page_table_html_optimizations_touchpoint_shows_note_text_not_raw_id():
+    # A legacy-imported page's "optimizations" touchpoint (see
+    # legacy_import/converter.py) has no catalog entry to resolve a name
+    # from — the raw touchpoint_id is unreadable on its own, and even its
+    # resolved name ("Optimizations") says nothing about what was actually
+    # planned. The Optimizations column should show the real imported text
+    # instead.
+    session = PlanSession(session_id="ntt-2026-07", client="North Texas Trailers", month="2026-07")
+    page = session.add_page("https://northtexastrailers.com/blog/tow-smart/")
+    page.touchpoints.append(
+        TouchpointAnswer(
+            touchpoint_id="optimizations",
+            category="Optimizations",
+            items=[{"note": "Core Optimizations: Title Tag, Meta Description"}],
+            validation=ValidationResult(passed=True, messages=["Imported from legacy workbook"]),
+        )
+    )
+    html = render_page_table_html(session)
+    assert "Core Optimizations: Title Tag, Meta Description" in html
+
+
+def test_render_summary_html_optimizations_touchpoint_shows_readable_name(sample_session):
+    sample_session.pages[0].touchpoints.append(
+        TouchpointAnswer(
+            touchpoint_id="optimizations",
+            category="Optimizations",
+            items=[{"note": "Some historical note"}],
+            validation=ValidationResult(passed=True, messages=["Imported from legacy workbook"]),
+        )
+    )
+    html = render_summary_html(sample_session)
+    assert "Optimizations" in html
+    assert "Some historical note" in html
