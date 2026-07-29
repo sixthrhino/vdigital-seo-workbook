@@ -18,6 +18,13 @@ _CORE_OPTIMIZATIONS_RE = re.compile(r"core optimizations:\s*([^.]+)\.?", re.I)
 _HEADER_INSTRUCTION_RE = re.compile(r"make headers?\s+below\s+(?:an?\s+)?<h[1-6]>\s*(?:tags?)?\.?", re.I)
 _HEADING_SEGMENT_RE = re.compile(r"<h([1-6])>\s*(.*?)(?=<h[1-6]>|$)", re.I | re.S)
 
+# Title Tag/Meta Description/H1 already get their own dedicated old/new
+# display everywhere this note is shown (the table report's Title/Meta/H1
+# columns, format_old_new's pairing in the narrative report) — naming them
+# again in the Core Optimizations summary is pure repetition, not new
+# information. Typo-tolerant ("TItle Tag" seen live) via lowercasing.
+_REDUNDANT_CORE_OPTIMIZATIONS = {"title tag", "meta description", "h1", "h1 tag"}
+
 
 def format_optimizations_note(note: str) -> list[str]:
     """Best-effort reformat of a legacy-imported "optimizations" touchpoint's
@@ -37,9 +44,12 @@ def format_optimizations_note(note: str) -> list[str]:
 
     core_match = _CORE_OPTIMIZATIONS_RE.search(text)
     if core_match:
-        touchpoints = ", ".join(p.strip() for p in core_match.group(1).split(",") if p.strip())
+        touchpoints = [
+            p.strip() for p in core_match.group(1).split(",")
+            if p.strip() and p.strip().lower() not in _REDUNDANT_CORE_OPTIMIZATIONS
+        ]
         if touchpoints:
-            lines.append(f"Core Optimizations: {touchpoints}")
+            lines.append(f"Core Optimizations: {', '.join(touchpoints)}")
         text = text[: core_match.start()] + text[core_match.end() :]
 
     text = _HEADER_INSTRUCTION_RE.sub(" ", text)

@@ -204,12 +204,35 @@ def test_render_page_table_html_optimizations_touchpoint_shows_note_text_not_raw
         TouchpointAnswer(
             touchpoint_id="optimizations",
             category="Optimizations",
-            items=[{"note": "Core Optimizations: Title Tag, Meta Description"}],
+            items=[{"note": "Core Optimizations: Schema Markup"}],
             validation=ValidationResult(passed=True, messages=["Imported from legacy workbook"]),
         )
     )
     html = render_page_table_html(session)
-    assert "Core Optimizations: Title Tag, Meta Description" in html
+    assert "Core Optimizations: Schema Markup" in html
+
+
+def test_render_page_table_html_optimizations_column_renders_one_line_per_entry():
+    session = PlanSession(session_id="ntt-2026-07", client="North Texas Trailers", month="2026-07")
+    page = session.add_page("https://northtexastrailers.com/blog/checking-over-your-trailer/")
+    page.touchpoints.append(
+        TouchpointAnswer(
+            touchpoint_id="optimizations",
+            category="Optimizations",
+            items=[{"note": (
+                "Core Optimizations: Title Tag, Meta Description, H1. "
+                "Make Headers below an <H2> tag "
+                "<H3> Checking Over Your Trailer <H3> Emergency Equipment"
+            )}],
+            validation=ValidationResult(passed=True, messages=["Imported from legacy workbook"]),
+        )
+    )
+    html = render_page_table_html(session)
+    assert '<span class="optimization-line">H3: Checking Over Your Trailer</span>' in html
+    assert '<span class="optimization-line">H3: Emergency Equipment</span>' in html
+    # Redundant with the dedicated Title/Meta/H1 columns — the whole
+    # "Core Optimizations:" line is dropped, not shown as its own line.
+    assert "Core Optimizations" not in html
 
 
 def test_render_summary_html_optimizations_touchpoint_shows_readable_name(sample_session):

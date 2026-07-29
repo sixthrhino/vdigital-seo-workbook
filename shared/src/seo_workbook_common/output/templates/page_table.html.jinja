@@ -17,6 +17,8 @@
   .old-value { color: #b91c1c; text-decoration: line-through; display: block; }
   .new-value { color: #14532d; font-weight: 600; display: block; }
   .url-cell { word-break: break-all; max-width: 220px; }
+  .optimization-line { display: block; }
+  .optimization-line:not(:last-child) { margin-bottom: 4px; }
   footer { margin-top: 24px; color: #999; font-size: 10px; }
 
   /* Open this report in a browser and use the browser's Print dialog
@@ -56,7 +58,11 @@
         <td class="url-cell">{{ row.url }}</td>
         <td>{{ row.keyword }}</td>
         <td>{{ row.geo }}</td>
-        <td>{{ row.optimizations }}</td>
+        <td>
+          {% for line in row.optimizations %}
+          <span class="optimization-line">{{ line }}</span>
+          {% endfor %}
+        </td>
         <td>
           <span class="old-value">{{ row.title_old }}</span>
           <span class="new-value">{{ row.title_new }}</span>

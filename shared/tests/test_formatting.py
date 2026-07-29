@@ -49,9 +49,9 @@ def test_unknown_touchpoint_falls_back_to_key_value_join():
     assert result == "a: 1; b: 2"
 
 
-def test_optimizations_touchpoint_shows_the_raw_note_verbatim():
-    result = format_item({"note": "Core Optimizations: Title Tag, Meta Description"}, "optimizations")
-    assert result == "Core Optimizations: Title Tag, Meta Description"
+def test_optimizations_touchpoint_shows_the_reformatted_note():
+    result = format_item({"note": "Core Optimizations: Schema Markup, Internal Linking"}, "optimizations")
+    assert result == "Core Optimizations: Schema Markup, Internal Linking"
 
 
 class TestFormatOptimizationsNote:
@@ -60,8 +60,18 @@ class TestFormatOptimizationsNote:
         assert format_optimizations_note("   ") == []
 
     def test_core_optimizations_extracted_as_its_own_line(self):
+        # Schema Markup isn't redundant with any dedicated column, so it's
+        # kept — unlike Title Tag/Meta Description/H1 (see the next tests).
+        result = format_optimizations_note("Core Optimizations: Title Tag, Meta Description, H1, Schema Markup.")
+        assert result == ["Core Optimizations: Schema Markup"]
+
+    def test_core_optimizations_line_dropped_when_only_redundant_touchpoints_named(self):
+        # Title Tag/Meta Description/H1 already get their own dedicated
+        # old/new display everywhere this note is shown — naming them
+        # again here is pure repetition, so the whole line is dropped
+        # rather than kept as a content-free "Core Optimizations:" label.
         result = format_optimizations_note("Core Optimizations: Title Tag, Meta Description, H1.")
-        assert result == ["Core Optimizations: Title Tag, Meta Description, H1"]
+        assert result == []
 
     def test_real_world_example_with_preamble_and_two_heading_levels(self):
         # Verbatim (whitespace-collapsed, as actually stored — see
@@ -75,7 +85,6 @@ class TestFormatOptimizationsNote:
         result = format_optimizations_note(note)
         assert result == [
             "Should not be a blog post.",
-            "Core Optimizations: TItle Tag, Meta Description, H1",
             "H3: Why Choose North Texas Trailers?",
             "H4: Expertise You Can Depend On",
             "H4: Quality Parts, Every Time",
@@ -93,7 +102,6 @@ class TestFormatOptimizationsNote:
         )
         result = format_optimizations_note(note)
         assert result == [
-            "Core Optimizations: TItle Tag, Meta Description, H1",
             "H3: Checking Over Your Trailer",
             "H3: Equipment That Connects the Trailer and Vehicle",
             "H3: Emergency Equipment",
@@ -106,10 +114,10 @@ class TestFormatOptimizationsNote:
     def test_tolerates_instruction_phrasing_with_no_an_or_tag_word(self):
         # Real messier variant seen live: "Make Headers below <H2>" with
         # neither "an" nor a trailing "tag" word.
-        note = "Core Optimizations: Title Tag. Make Headers below <H2> <H3> Understanding Trailer Springs <H3> Conclusion"
+        note = "Core Optimizations: Schema Markup. Make Headers below <H2> <H3> Understanding Trailer Springs <H3> Conclusion"
         result = format_optimizations_note(note)
         assert result == [
-            "Core Optimizations: Title Tag",
+            "Core Optimizations: Schema Markup",
             "H3: Understanding Trailer Springs",
             "H3: Conclusion",
         ]
@@ -123,7 +131,6 @@ class TestFormatOptimizationsNote:
         )
         result = format_optimizations_note(note)
         assert result == [
-            "Core Optimizations: Title Tag, Meta Description, H1",
             "H3: Checking Over Your Trailer",
             "H3: Emergency Equipment",
         ]

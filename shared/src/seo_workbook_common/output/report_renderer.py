@@ -58,19 +58,19 @@ def render_summary_html(session: PlanSession, catalog: BestPracticeCatalog | Non
     return template.render(session=session, touchpoint_name=_touchpoint_name_resolver(catalog))
 
 
-def _optimization_display(tp: TouchpointAnswer, resolve_name: Callable[[str], str]) -> str:
+def _optimization_display_lines(tp: TouchpointAnswer, resolve_name: Callable[[str], str]) -> list[str]:
     if tp.touchpoint_id == "optimizations":
         # The bare name ("Optimizations") says nothing on its own — unlike
         # every other touchpoint here, there's no dedicated column showing
         # this one's actual content anywhere else in the table, so show
         # the reformatted note (see format_optimizations_note) instead of
-        # just its label.
+        # just its label — one line per cell, not one run-on string.
         lines = [
             line for item in tp.items
             for line in format_optimizations_note(item.get("note", ""))
         ]
-        return "; ".join(lines) if lines else resolve_name(tp.touchpoint_id)
-    return resolve_name(tp.touchpoint_id)
+        return lines or [resolve_name(tp.touchpoint_id)]
+    return [resolve_name(tp.touchpoint_id)]
 
 
 def _page_table_row(page: Page, resolve_name: Callable[[str], str]) -> dict:
@@ -79,8 +79,8 @@ def _page_table_row(page: Page, resolve_name: Callable[[str], str]) -> dict:
     keyword_display = f"{keyword} ({volume})" if keyword and volume is not None else keyword
 
     optimizations = [
-        _optimization_display(tp, resolve_name) for tp in page.touchpoints
-        if tp.touchpoint_id not in _TABLE_DEDICATED_TOUCHPOINTS
+        line for tp in page.touchpoints if tp.touchpoint_id not in _TABLE_DEDICATED_TOUCHPOINTS
+        for line in _optimization_display_lines(tp, resolve_name)
     ]
 
     def pair(touchpoint_id: str) -> tuple[str, str]:
@@ -97,7 +97,7 @@ def _page_table_row(page: Page, resolve_name: Callable[[str], str]) -> dict:
         "url": page.url,
         "keyword": keyword_display,
         "geo": page.geo or "",
-        "optimizations": ", ".join(optimizations) or "—",
+        "optimizations": optimizations or ["—"],
         "title_old": title_old, "title_new": title_new,
         "meta_old": meta_old, "meta_new": meta_new,
         "h1_old": h1_old, "h1_new": h1_new,
