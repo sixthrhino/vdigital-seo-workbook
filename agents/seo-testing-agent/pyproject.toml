@@ -4,7 +4,19 @@ version = "0.1.0"
 description = "ADK-based agent running live-site SEO/content QA checks via seo-testing-mcp, migrated from vdigital-testing-agent."
 requires-python = ">=3.11"
 dependencies = [
-    "google-adk==2.3.0",
+    # Originally pinned exactly to 2.3.0 (whatever was current when this was
+    # first written in the source repo) — moved to 2.5.0 to match
+    # seo-workbook-agent/seo-assistant: those two must share one google-adk
+    # version (seo-assistant installs all three agent packages together in
+    # one process — see its pyproject.toml), and 2.3.0 has a real bug
+    # (McpToolset silently drops an *async* header_provider instead of
+    # awaiting it, confirmed via a live 500 in seo-assistant) that 2.5.0
+    # fixes — this package doesn't use header_provider itself (its
+    # McpToolset gets static `headers=` on SseConnectionParams instead) so
+    # it was never exposed to that bug, but there's no reason to stay on
+    # the older, buggier version once forced to pick one. Full test suite
+    # re-verified passing under 2.5.0 before making this change.
+    "google-adk==2.5.0",
     # Pinned below 2: mcp 2.0.0 (published 2026-07-28) changed APIs
     # google-adk's McpToolset depends on — see the same pin in
     # seo-workbook-agent's pyproject.toml for the concrete breakage this

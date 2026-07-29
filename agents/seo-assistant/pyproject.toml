@@ -14,12 +14,22 @@ requires-python = ">=3.11"
 # Dependencies below are the union of seo-workbook-agent's and
 # seo-testing-agent's own direct dependencies (both packages' code runs in
 # this one process) — keep in sync with both.
-# google-adk pinned to seo-testing-agent's exact version (its stricter
-# constraint) — confirmed compatible with seo-workbook-agent's code
-# (McpToolset.header_provider, StreamableHTTPConnectionParams both present
-# in 2.3.0).
+#
+# google-adk pinned to 2.5.0 (seo-workbook-agent's own tested version), NOT
+# seo-testing-agent's 2.3.0 — confirmed via a real deployed 500 that 2.3.0's
+# McpToolset._execute_with_session calls header_provider without checking
+# whether it returned an awaitable, silently breaking seo-workbook-agent's
+# *async* header_provider (used for its StreamableHTTPConnectionParams MCP
+# auth) and causing every one of its MCP tools to be missing from
+# tools_dict ("Tool 'find_session' not found"). 2.5.0 added an explicit
+# `inspect.isawaitable(provider_headers)` check that handles both sync and
+# async providers correctly. seo-testing-agent doesn't use header_provider
+# at all (its McpToolset gets static `headers=` on SseConnectionParams
+# instead), so it isn't exposed to this bug either way — safe to run under
+# 2.5.0 here without touching that package's own pin (this is a separate
+# Docker image/venv from seo-testing-agent's standalone deployment).
 dependencies = [
-    "google-adk==2.3.0",
+    "google-adk==2.5.0",
     "mcp>=1.9.0,<2",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",

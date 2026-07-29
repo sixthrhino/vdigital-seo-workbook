@@ -158,6 +158,13 @@ setup_project() {
     --condition=None \
     --quiet
 
+  echo "==> Granting ${sa} access to read Secret Manager secrets (RUN_API_KEY)..."
+  gcloud projects add-iam-policy-binding "${PROJECT}" \
+    --member="serviceAccount:${sa}" \
+    --role="roles/secretmanager.secretAccessor" \
+    --condition=None \
+    --quiet
+
   echo "==> Granting ${sa} permission to sign its own tokens (only needed if reports are ever served through this service instead of seo-workbook-agent)..."
   gcloud iam service-accounts add-iam-policy-binding "${sa}" \
     --project "${PROJECT}" \
