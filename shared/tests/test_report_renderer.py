@@ -55,9 +55,13 @@ def test_render_summary_html_shows_keyword_and_geo(sample_session):
 
 
 def test_render_summary_html_shows_multi_item_touchpoint_entries(sample_session):
+    # Headings render as an old/new pair (two rows), not a single arrow
+    # line — see format_old_new.
     html = render_summary_html(sample_session)
-    assert "H4 → H3: Common Career Paths" in html
-    assert "H4 → H3: How to use your GI benefits" in html
+    assert "Old: &lt;H4&gt; Common Career Paths" in html
+    assert "New: &lt;H3&gt; Common Career Paths" in html
+    assert "Old: &lt;H4&gt; How to use your GI benefits" in html
+    assert "New: &lt;H3&gt; How to use your GI benefits" in html
 
 
 def test_render_summary_html_uses_touchpoint_names_from_catalog(sample_session):

@@ -53,3 +53,24 @@ def format_item(item: dict[str, str], touchpoint_id: str) -> str:
         return alt
 
     return "; ".join(f"{k}: {v}" for k, v in sorted(item.items()))
+
+
+def format_old_new(item: dict[str, str], touchpoint_id: str) -> tuple[str, str] | None:
+    """Split one touchpoint item into (old, new) display strings for the
+    HTML report's two-row old/new layout — cramming both into a single
+    line (see format_item, still used by Sheets/plain-text output) reads
+    poorly for a side-by-side "what changed" comparison. Returns None for
+    touchpoints with no genuine old/new pairing (a brand-new internal link,
+    a canonical target with no prior value) — the template falls back to
+    format_item's single line for those.
+    """
+    if touchpoint_id in _SINGLE_VALUE_TOUCHPOINTS or touchpoint_id == "image_alt_text":
+        return item.get("old_value") or "—", item.get("new_value", "")
+
+    if touchpoint_id == "h2_h3_h4_tags":
+        heading_text = item.get("heading_text", "")
+        old_tag = item.get("old_tag", "?").upper()
+        new_tag = item.get("new_tag", "?").upper()
+        return f"<{old_tag}> {heading_text}", f"<{new_tag}> {heading_text}"
+
+    return None
