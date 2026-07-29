@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # MCP server (Cloud Run service URL in production)
     mcp_server_url: str = "http://localhost:8080"
 
+    # seo-workbook-mcp's Streamable HTTP endpoint (e.g.
+    # "https://seo-workbook-mcp-server-xyz.run.app/mcp") — Mode B's plan
+    # data source (see plan_session_source.py). Different transport from
+    # mcp_server_url above (Streamable HTTP vs. SSE), so it needs its own
+    # client, not just another URL to the same one.
+    workbook_mcp_url: str = "http://localhost:8000/mcp"
+
     # Gemini model used by the agent
     agent_model: str = "gemini-2.0-flash"
 

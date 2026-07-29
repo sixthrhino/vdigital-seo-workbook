@@ -28,6 +28,12 @@ AGENT_MODEL="${AGENT_MODEL:-gemini-2.5-flash}"
 MCP_IMAGE="gcr.io/${PROJECT}/seo-testing-mcp"
 AGENT_IMAGE="gcr.io/${PROJECT}/seo-testing-agent"
 
+# seo-workbook-mcp — Mode B's plan data source (see
+# plan_session_source.py). Defaults to where the canonical, consolidated
+# deployment lives today; override if seo-workbook-mcp ever moves.
+WORKBOOK_MCP_PROJECT="${WORKBOOK_MCP_PROJECT:-vdigital-seo-assistant}"
+WORKBOOK_MCP_SERVICE="${WORKBOOK_MCP_SERVICE:-seo-workbook-mcp-server}"
+
 TARGET="${1:-both}"
 
 # Neither service is given a dedicated --service-account below, so both run as
@@ -42,6 +48,12 @@ _project_number() {
 
 _default_compute_sa() {
   echo "$(_project_number)-compute@developer.gserviceaccount.com"
+}
+
+_workbook_mcp_url() {
+  gcloud run services describe "${WORKBOOK_MCP_SERVICE}" \
+    --project "${WORKBOOK_MCP_PROJECT}" --region "${REGION}" \
+    --format="value(status.url)"
 }
 
 # ---------------------------------------------------------------------------
@@ -104,6 +116,7 @@ deploy_agent() {
   MCP_URL="${MCP_URL:-$(gcloud run services describe seo-testing-mcp \
     --region "${REGION}" --project "${PROJECT}" \
     --format "value(status.url)")}"
+  WORKBOOK_MCP_URL="${WORKBOOK_MCP_URL:-$(_workbook_mcp_url)/mcp}"
 
   echo "==> Building seo-testing-agent image..."
   gcloud builds submit . \
@@ -148,7 +161,7 @@ deploy_agent() {
     --project "${PROJECT}" \
     --allow-unauthenticated \
     --no-cpu-throttling \
-    --set-env-vars "ENVIRONMENT=production,MCP_SERVER_URL=${MCP_URL},GCP_PROJECT_ID=${PROJECT},GCP_LOCATION=${REGION},AGENT_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},RUN_API_KEY=${RUN_API_KEY},CHAT_AUDIENCE=${CHAT_AUDIENCE}" \
+    --set-env-vars "ENVIRONMENT=production,MCP_SERVER_URL=${MCP_URL},WORKBOOK_MCP_URL=${WORKBOOK_MCP_URL},GCP_PROJECT_ID=${PROJECT},GCP_LOCATION=${REGION},AGENT_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},RUN_API_KEY=${RUN_API_KEY},CHAT_AUDIENCE=${CHAT_AUDIENCE}" \
     --memory 1Gi \
     --timeout 3600 \
     --concurrency 10
@@ -215,6 +228,16 @@ setup_project() {
       echo "    mcp-servers/seo-testing-mcp/data/${f} not found locally — skipping seed (geo_add_city/dictionary_add_term will start from an empty file)."
     fi
   done
+
+  echo ""
+  echo "==> One cross-project grant still needs running once, by someone with"
+  echo "    access to ${WORKBOOK_MCP_PROJECT} (this project's gcloud identity"
+  echo "    likely can't do this itself) — review_plan_against_live_site calls"
+  echo "    seo-workbook-mcp there to fetch a client's recorded plan:"
+  echo ""
+  echo "    gcloud run services add-iam-policy-binding ${WORKBOOK_MCP_SERVICE} \\"
+  echo "      --project ${WORKBOOK_MCP_PROJECT} --region ${REGION} \\"
+  echo "      --member=\"serviceAccount:$(_default_compute_sa)\" --role=\"roles/run.invoker\" --quiet"
 }
 
 # ---------------------------------------------------------------------------

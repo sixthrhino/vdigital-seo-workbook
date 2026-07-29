@@ -416,16 +416,16 @@ async def run_batch(rows: list[dict], mcp_url: str, auth_headers: dict | None,
 
 
 # ---------------------------------------------------------------------------
-# Sheets-by-ID lookups — for a Google Sheets link shared directly in Chat
-# (a Drive file reference, not an uploaded .xlsx) instead of a file upload.
-# Single-call, short-lived MCP sessions since these aren't part of a batch
-# run — main.py's /chat handler calls these directly.
+# submit_report — single-call, short-lived MCP session, not part of the
+# batch run's own session (main.py's /chat handler and
+# agent.py's review_plan_against_live_site call this directly, after
+# run_batch's session has already closed).
 #
 # Deliberately don't go through _call_tool: it converts a tool error into a
 # fabricated fail "check" entry (right for the checks list elsewhere in this
-# module), which here would silently become a bogus single-item months/rows
-# list instead of surfacing the failure. These raise instead, so main.py's
-# existing try/except can show a real error message.
+# module), which here would silently swallow a real report-generation
+# failure instead of surfacing it. This raises instead, so callers' existing
+# try/except can show a real error message.
 # ---------------------------------------------------------------------------
 
 async def _call_tool_or_raise(session: ClientSession, name: str, **kwargs) -> Any:
@@ -445,80 +445,6 @@ def _flatten_exception_message(exc: BaseException) -> str:
     while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
         exc = exc.exceptions[0]
     return str(exc)
-
-
-async def list_workbook_months(spreadsheet_id: str, mcp_url: str, auth_headers: dict | None) -> list[str]:
-    try:
-        async with sse_client(f"{mcp_url}/sse", headers=auth_headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await _call_tool_or_raise(session, "workbook_list_months", spreadsheet_id=spreadsheet_id)
-                return result if isinstance(result, list) else []
-    except BaseExceptionGroup as eg:
-        raise RuntimeError(_flatten_exception_message(eg)) from eg
-
-
-async def get_workbook_month_rows(spreadsheet_id: str, month_year: str, mcp_url: str,
-                                   auth_headers: dict | None) -> list[dict]:
-    try:
-        async with sse_client(f"{mcp_url}/sse", headers=auth_headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await _call_tool_or_raise(session, "workbook_get_month_rows",
-                                                    spreadsheet_id=spreadsheet_id, month_year=month_year)
-                return result if isinstance(result, list) else []
-    except BaseExceptionGroup as eg:
-        raise RuntimeError(_flatten_exception_message(eg)) from eg
-
-
-async def get_workbook_title(spreadsheet_id: str, mcp_url: str, auth_headers: dict | None) -> str:
-    try:
-        async with sse_client(f"{mcp_url}/sse", headers=auth_headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await _call_tool_or_raise(session, "workbook_get_title", spreadsheet_id=spreadsheet_id)
-                return result if isinstance(result, str) else ""
-    except BaseExceptionGroup as eg:
-        raise RuntimeError(_flatten_exception_message(eg)) from eg
-
-
-async def get_workbook_brand_guide(spreadsheet_id: str, mcp_url: str, auth_headers: dict | None) -> dict:
-    try:
-        async with sse_client(f"{mcp_url}/sse", headers=auth_headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await _call_tool_or_raise(session, "workbook_get_brand_guide", spreadsheet_id=spreadsheet_id)
-                return result if isinstance(result, dict) else {}
-    except BaseExceptionGroup as eg:
-        raise RuntimeError(_flatten_exception_message(eg)) from eg
-
-
-async def get_workbook_client_details(spreadsheet_id: str, mcp_url: str, auth_headers: dict | None) -> dict:
-    try:
-        async with sse_client(f"{mcp_url}/sse", headers=auth_headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await _call_tool_or_raise(session, "workbook_get_client_details",
-                                                    spreadsheet_id=spreadsheet_id)
-                return result if isinstance(result, dict) else {}
-    except BaseExceptionGroup as eg:
-        raise RuntimeError(_flatten_exception_message(eg)) from eg
-
-
-async def parse_brand_guide_text(brand_guide_text: str, mcp_url: str, auth_headers: dict | None) -> dict:
-    """Parse raw brand guide text (e.g. from workbook_upload.parse_brand_guide_tab,
-    which reads an uploaded .xlsx's bytes locally and has no access to
-    mcp-server's parser directly) into the same structured shape
-    get_workbook_brand_guide returns for the Sheets-API path."""
-    try:
-        async with sse_client(f"{mcp_url}/sse", headers=auth_headers) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await _call_tool_or_raise(session, "content_parse_brand_guide",
-                                                    brand_guide_text=brand_guide_text)
-                return result if isinstance(result, dict) else {}
-    except BaseExceptionGroup as eg:
-        raise RuntimeError(_flatten_exception_message(eg)) from eg
 
 
 async def submit_report(client: str, month_year: str, url_results: list[dict], mcp_url: str,

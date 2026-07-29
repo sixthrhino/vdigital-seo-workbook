@@ -95,23 +95,35 @@ deploy() {
   echo "==> Deploying seo-assistant to Cloud Run..."
   # SEO_WORKBOOK_* vars configure the reused seo-workbook-agent HTTP/chat
   # layer (create_app/AgentCore/http_router/chat_router — see main.py) that
-  # this whole service runs on top of. MCP_SERVER_URL / AGENT_MODEL /
-  # ENVIRONMENT (bare, no prefix) configure seo-testing-agent's sub-agent —
-  # ENVIRONMENT=production is required for it to attach an ID token when
-  # calling seo-testing-mcp (see seo_testing_agent/agent.py's
-  # _mcp_auth_headers). --no-cpu-throttling for the same reason as the
-  # other two agent deploys: /chat acks immediately and keeps working in a
-  # background task afterward.
+  # this whole service runs on top of. MCP_SERVER_URL / WORKBOOK_MCP_URL /
+  # AGENT_MODEL / ENVIRONMENT (bare, no prefix) configure seo-testing-agent's
+  # sub-agent — WORKBOOK_MCP_URL points its review_plan_against_live_site
+  # tool at the same seo-workbook-mcp instance the workbook sub-agent uses
+  # (see plan_session_source.py), and ENVIRONMENT=production is required for
+  # it to attach an ID token when calling either MCP server (see
+  # seo_testing_agent/agent.py's _mcp_auth_headers/_workbook_mcp_auth_headers).
+  # --no-cpu-throttling for the same reason as the other two agent deploys:
+  # /chat acks immediately and keeps working in a background task afterward.
+  # --timeout 3600 (not 300): Starlette's BackgroundTasks keep the *original*
+  # /chat request "in flight" until they finish, so Cloud Run's request
+  # timeout bounds the whole background job, not just the initial ack. Now
+  # that review_plan_against_live_site's live-site batch runs in-process
+  # here too, 300s isn't enough for a multi-page batch (real HTTP fetches +
+  # PageSpeed-style + Gemini grammar/content checks per page) — confirmed
+  # live: a real request's checks were still running past the 5-minute mark
+  # with no error/reply ever posted, i.e. Cloud Run killed it mid-batch.
+  # Matches seo-testing-agent's own standalone deploy-seo-testing.sh, which
+  # already used 3600 for this exact reason.
   gcloud run deploy seo-assistant \
     --image "${IMAGE}" \
     --region "${REGION}" \
     --project "${PROJECT}" \
     --allow-unauthenticated \
     --no-cpu-throttling \
-    --set-env-vars "SEO_WORKBOOK_ENVIRONMENT=production,SEO_WORKBOOK_MCP_SERVER_URL=${WORKBOOK_MCP_URL}/mcp,SEO_WORKBOOK_AGENT_MODEL=${AGENT_MODEL},SEO_WORKBOOK_CHAT_AUDIENCE=${CHAT_AUDIENCE},MCP_SERVER_URL=${TESTING_MCP_URL},AGENT_MODEL=${AGENT_MODEL},ENVIRONMENT=production,GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION}" \
+    --set-env-vars "SEO_WORKBOOK_ENVIRONMENT=production,SEO_WORKBOOK_MCP_SERVER_URL=${WORKBOOK_MCP_URL}/mcp,SEO_WORKBOOK_AGENT_MODEL=${AGENT_MODEL},SEO_WORKBOOK_CHAT_AUDIENCE=${CHAT_AUDIENCE},MCP_SERVER_URL=${TESTING_MCP_URL},WORKBOOK_MCP_URL=${WORKBOOK_MCP_URL}/mcp,AGENT_MODEL=${AGENT_MODEL},ENVIRONMENT=production,GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION}" \
     --set-secrets "SEO_WORKBOOK_RUN_API_KEY=seo-assistant-run-api-key:latest" \
     --memory 1Gi \
-    --timeout 300 \
+    --timeout 3600 \
     --concurrency 10
 
   AGENT_URL=$(gcloud run services describe seo-assistant \

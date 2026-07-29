@@ -164,7 +164,11 @@ def build_agent(settings: AgentSettings) -> Agent:
     return Agent(
         name="seo_workbook_agent",
         model=settings.agent_model,
-        description="Gathers a client's monthly SEO optimization plan through conversation.",
+        description=(
+            "Gathers a client's monthly SEO optimization plan through conversation, "
+            "and imports a client's legacy workbook (a shared Google Sheet) into "
+            "the system as recorded plan history via import_legacy_workbook."
+        ),
         instruction=INSTRUCTIONS,
         tools=[toolset],
     )

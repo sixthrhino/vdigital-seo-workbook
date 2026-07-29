@@ -20,10 +20,11 @@ mcp-servers/seo-workbook-mcp/    FastMCP tool server for seo-workbook-agent (als
 mcp-servers/seo-testing-mcp/     FastMCP tool server for seo-testing-agent (also
                                  has data/: QA rules catalog, cities DB, dictionaries)
 shared/                          seo-workbook-common — cross-cutting code shared
-                                 by the seo-workbook pair only (seo-testing's pair
-                                 deliberately duplicates its own small parsing
-                                 helpers instead — see workbook_upload.py's
-                                 docstring for why)
+                                 by the seo-workbook pair only (seo-testing-agent
+                                 has no shared/ package dependency, but calls
+                                 seo-workbook-mcp's find_session tool directly
+                                 over MCP — see plan_session_source.py — to
+                                 source Mode B's plan data)
 ```
 
 Each component uses a `src/` layout (`<component>/src/<package_name>/`,
