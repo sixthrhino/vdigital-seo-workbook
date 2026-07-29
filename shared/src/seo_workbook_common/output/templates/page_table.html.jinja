@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{ session.client }} — Plan Review — {{ session.month | format_month }}</title>
+<style>
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 13px; color: #1a1a1a;
+         margin: 0 auto; padding: 28px 20px; }
+  h1 { font-size: 20px; margin-bottom: 0; }
+  .meta { color: #555; margin-top: 4px; margin-bottom: 20px; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; }
+  .status.draft { background: #fde68a; color: #7c5a00; }
+  .status.finalized { background: #bbf7d0; color: #14532d; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border: 1px solid #eee; vertical-align: top; word-wrap: break-word; }
+  th { background: #f5f5f5; font-size: 11px; text-transform: uppercase; color: #555; }
+  .old-value { color: #b91c1c; text-decoration: line-through; display: block; }
+  .new-value { color: #14532d; font-weight: 600; display: block; }
+  .url-cell { word-break: break-all; max-width: 220px; }
+  footer { margin-top: 24px; color: #999; font-size: 10px; }
+
+  /* Open this report in a browser and use the browser's Print dialog
+     ("Save as PDF") to get a PDF — no server-side PDF generation. Landscape
+     gives this wide a table more room than the default portrait page. */
+  @media print {
+    @page { size: landscape; }
+    body { padding: 12px; font-size: 10px; }
+    table { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+  <h1>{{ session.client }} — Plan Review</h1>
+  <div class="meta">
+    {{ session.month | format_month }}
+    · <span class="status {{ session.status.value }}">{{ session.status.value }}</span>
+    {% if session.requested_by %}· requested by {{ session.requested_by }}{% endif %}
+  </div>
+
+  {% if rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>URL</th>
+        <th>Keyword</th>
+        <th>Geo</th>
+        <th>Optimizations</th>
+        <th>Title</th>
+        <th>Meta Description</th>
+        <th>H1</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="url-cell">{{ row.url }}</td>
+        <td>{{ row.keyword }}</td>
+        <td>{{ row.geo }}</td>
+        <td>{{ row.optimizations }}</td>
+        <td>
+          <span class="old-value">{{ row.title_old }}</span>
+          <span class="new-value">{{ row.title_new }}</span>
+        </td>
+        <td>
+          <span class="old-value">{{ row.meta_old }}</span>
+          <span class="new-value">{{ row.meta_new }}</span>
+        </td>
+        <td>
+          <span class="old-value">{{ row.h1_old }}</span>
+          <span class="new-value">{{ row.h1_new }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p><em>No pages recorded yet.</em></p>
+  {% endif %}
+
+  <footer>
+    Generated from session {{ session.session_id }} · created {{ session.created_at }}
+    {%- if session.finalized_at %} · finalized {{ session.finalized_at }}{% endif %}
+  </footer>
+</body>
+</html>

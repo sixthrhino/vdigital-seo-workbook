@@ -166,6 +166,54 @@ async def test_render_session_report_requires_agent_public_url_configured():
             await client.call_tool("render_session_report", {"session_id": session_id})
 
 
+async def test_render_session_table_report_uploads_and_returns_a_short_share_link(mcp_app_with_fake_storage):
+    app, fake_storage_client, fake_report_tokens = mcp_app_with_fake_storage
+    async with Client(app) as client:
+        session_id = await _start_session_with_a_touchpoint(client)
+        result = await client.call_tool("render_session_table_report", {"session_id": session_id})
+
+    assert result.data["filename"] == "KYZ-2026-06-seo-plan-table.html"
+    assert fake_storage_client.requested_bucket_name == "test-reports-bucket"
+
+    blob = fake_storage_client.bucket_instance.blobs["KYZ-2026-06-seo-plan-table.html"]
+    assert "https://kyz.com/a/" in blob.uploaded_content
+    assert "Auto Insurance in Scottsdale" in blob.uploaded_content
+
+    report_url = result.data["report_url"]
+    assert report_url.startswith("https://agent.example.com/reports/")
+    token = report_url.rsplit("/", 1)[-1]
+    stored = fake_report_tokens.documents[token]
+    assert stored["bucket_name"] == "test-reports-bucket"
+    assert stored["blob_name"] == "KYZ-2026-06-seo-plan-table.html"
+
+
+async def test_render_session_table_report_is_independent_of_the_narrative_report(mcp_app_with_fake_storage):
+    # Regenerating one must not overwrite the other — they're different
+    # filenames/blobs, not two names for the same file.
+    app, fake_storage_client, _ = mcp_app_with_fake_storage
+    async with Client(app) as client:
+        session_id = await _start_session_with_a_touchpoint(client)
+        await client.call_tool("render_session_report", {"session_id": session_id})
+        await client.call_tool("render_session_table_report", {"session_id": session_id})
+
+    assert "KYZ-2026-06-seo-plan.html" in fake_storage_client.bucket_instance.blobs
+    assert "KYZ-2026-06-seo-plan-table.html" in fake_storage_client.bucket_instance.blobs
+
+
+async def test_render_session_table_report_unknown_session_raises(mcp_app_with_fake_storage):
+    app, _, _ = mcp_app_with_fake_storage
+    async with Client(app) as client:
+        with pytest.raises(ToolError):
+            await client.call_tool("render_session_table_report", {"session_id": "does-not-exist"})
+
+
+async def test_render_session_table_report_requires_reports_bucket_configured(mcp_app):
+    async with Client(mcp_app) as client:
+        session_id = await _start_session_with_a_touchpoint(client)
+        with pytest.raises(ToolError, match="reports_bucket is not configured"):
+            await client.call_tool("render_session_table_report", {"session_id": session_id})
+
+
 class _FakeValues:
     def __init__(self):
         self.update_calls = []
