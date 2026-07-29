@@ -6,6 +6,7 @@ from seo_workbook_common.legacy_import.workbook_sheets import (
     extract_spreadsheet_id,
     get_month_rows,
     list_workbook_months,
+    read_client_details,
 )
 
 
@@ -57,27 +58,43 @@ def test_get_col_returns_empty_string_when_no_alias_present():
 
 
 class _FakeWorksheet:
-    def __init__(self, records):
-        self._records = records
+    def __init__(self, records=None, values=None, title="On-Page"):
+        self._records = records or []
+        self._values = values or []
+        self.title = title
 
     def get_all_records(self, head=1, default_blank=""):
         return self._records
 
+    def get_all_values(self):
+        return self._values
+
 
 class _FakeWorkbook:
-    def __init__(self, worksheet):
+    def __init__(self, worksheet, extra_worksheets: dict | None = None):
         self._worksheet = worksheet
+        self._extra = extra_worksheets or {}
 
     def worksheet(self, name):
-        return self._worksheet
+        import gspread
+
+        if name == self._worksheet.title:
+            return self._worksheet
+        if name in self._extra:
+            return self._extra[name]
+        raise gspread.exceptions.WorksheetNotFound(name)
+
+    def worksheets(self):
+        return [self._worksheet, *self._extra.values()]
 
 
 class _FakeSheetsClient:
-    def __init__(self, worksheet):
+    def __init__(self, worksheet, extra_worksheets: dict | None = None):
         self._worksheet = worksheet
+        self._extra = extra_worksheets or {}
 
     def open_by_key(self, spreadsheet_id):
-        return _FakeWorkbook(self._worksheet)
+        return _FakeWorkbook(self._worksheet, self._extra)
 
 
 _SAMPLE_RECORDS = [
@@ -117,3 +134,95 @@ def test_get_month_rows_filters_to_the_requested_month_and_skips_non_url_rows():
 def test_get_month_rows_returns_empty_for_a_month_not_in_the_sheet():
     client = _FakeSheetsClient(_FakeWorksheet(_SAMPLE_RECORDS))
     assert get_month_rows(client, "sheet-id", "2026-01") == []
+
+
+def test_read_client_details_returns_business_name_and_website():
+    client_details_ws = _FakeWorksheet(
+        values=[["Client Business Name", "Dynamic Dibs"], ["Website URL", "https://dynamicdrips.com"]],
+        title="Client Details",
+    )
+    client = _FakeSheetsClient(
+        _FakeWorksheet(_SAMPLE_RECORDS), extra_worksheets={"Client Details": client_details_ws}
+    )
+    result = read_client_details(client, "sheet-id")
+    assert result == {"client": "Dynamic Dibs", "details": {"website": "https://dynamicdrips.com"}}
+
+
+def test_read_client_details_missing_tab_returns_empty_dict():
+    client = _FakeSheetsClient(_FakeWorksheet(_SAMPLE_RECORDS))
+    assert read_client_details(client, "sheet-id") == {"client": "", "details": {}}
+
+
+def test_read_client_details_blank_value_is_ignored():
+    client_details_ws = _FakeWorksheet(
+        values=[["Client Business Name", ""]], title="Client Details",
+    )
+    client = _FakeSheetsClient(
+        _FakeWorksheet(_SAMPLE_RECORDS), extra_worksheets={"Client Details": client_details_ws}
+    )
+    assert read_client_details(client, "sheet-id") == {"client": "", "details": {}}
+
+
+def test_read_client_details_tolerates_alternate_labels():
+    client_details_ws = _FakeWorksheet(
+        values=[["Business Name", "Sonoran Spine"]], title="Client Details",
+    )
+    client = _FakeSheetsClient(
+        _FakeWorksheet(_SAMPLE_RECORDS), extra_worksheets={"Client Details": client_details_ws}
+    )
+    result = read_client_details(client, "sheet-id")
+    assert result["client"] == "Sonoran Spine"
+
+
+def test_read_client_details_captures_allowlisted_account_metadata():
+    client_details_ws = _FakeWorksheet(
+        values=[
+            ["Client Business Name", "Dynamic Dibs"],
+            ["Website URL", "https://dynamicdrips.com"],
+            ["Package Level", "Growth"],
+            ["Project Start Date", "2026-01-15"],
+            ["Other Services?", "PPC"],
+            ["Account Manager", "Kevin L"],
+            ["Project Manager", "PM"],
+            ["SEO Strategist", "Kevin L"],
+            ["Content Strategist", "CS"],
+            ["Link Builder", "LB"],
+        ],
+        title="Client Details",
+    )
+    client = _FakeSheetsClient(
+        _FakeWorksheet(_SAMPLE_RECORDS), extra_worksheets={"Client Details": client_details_ws}
+    )
+    result = read_client_details(client, "sheet-id")
+    assert result["details"] == {
+        "website": "https://dynamicdrips.com",
+        "package_level": "Growth",
+        "project_start_date": "2026-01-15",
+        "other_services": "PPC",
+        "account_manager": "Kevin L",
+        "project_manager": "PM",
+        "seo_strategist": "Kevin L",
+        "content_strategist": "CS",
+        "link_builder": "LB",
+    }
+
+
+def test_read_client_details_never_captures_login_credential_rows():
+    # The tab is labeled "DO NOT PUT CREDENTIALS HERE" but a workbook could
+    # ignore that — these rows must never be read into client_details
+    # regardless, since it ends up in MongoDB and potentially a shared
+    # report link.
+    client_details_ws = _FakeWorksheet(
+        values=[
+            ["Client Business Name", "Dynamic Dibs"],
+            ["Website Login URL", "https://dynamicdrips.com/wp-admin"],
+            ["Website Username", "admin"],
+            ["Website Password", "hunter2"],
+        ],
+        title="Client Details",
+    )
+    client = _FakeSheetsClient(
+        _FakeWorksheet(_SAMPLE_RECORDS), extra_worksheets={"Client Details": client_details_ws}
+    )
+    result = read_client_details(client, "sheet-id")
+    assert result["details"] == {}

@@ -71,10 +71,13 @@ def create_app(
     )
     import_tools.register(
         mcp,
+        catalog,
         store,
         settings,
         mongo_collection_factory=get_mongo_collection,
         workbook_sheets_client_factory=workbook_sheets_client_factory,
+        storage_client_factory=storage_client_factory,
+        report_tokens_collection_factory=report_tokens_collection_factory,
     )
 
     return mcp

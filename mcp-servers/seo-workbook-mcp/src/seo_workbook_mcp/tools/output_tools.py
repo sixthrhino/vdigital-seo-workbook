@@ -10,13 +10,13 @@ from seo_workbook_common.output import (
     render_page_table_html,
     render_summary_html,
     session_to_rows,
-    upload_html,
     write_rows_to_sheet,
 )
-from seo_workbook_common.storage import build_mongo_collection, create_report_token
+from seo_workbook_common.storage import build_mongo_collection
 
 from ..config import McpSettings
 from ..session_store import SessionStore
+from .report_upload import upload_report_and_get_link
 
 
 def _touchpoint_name(catalog: BestPracticeCatalog, touchpoint_id: str) -> str:
@@ -78,13 +78,11 @@ def register(
         html = render_summary_html(session, catalog=catalog)
         filename = f"{session.client}-{session.month}-seo-plan.html".replace(" ", "-")
 
-        storage_client = storage_client_factory()
-        upload_html(storage_client, settings.reports_bucket, filename, html)
-
-        tokens_collection = get_report_tokens_collection()
-        token = create_report_token(tokens_collection, settings.reports_bucket, filename)
-
-        report_url = f"{settings.agent_public_url.rstrip('/')}/reports/{token}"
+        report_url = upload_report_and_get_link(
+            html, filename,
+            reports_bucket=settings.reports_bucket, agent_public_url=settings.agent_public_url,
+            storage_client_factory=storage_client_factory, get_report_tokens_collection=get_report_tokens_collection,
+        )
         return {"filename": filename, "report_url": report_url}
 
     @mcp.tool()
@@ -115,13 +113,11 @@ def register(
         html = render_page_table_html(session, catalog=catalog)
         filename = f"{session.client}-{session.month}-seo-plan-table.html".replace(" ", "-")
 
-        storage_client = storage_client_factory()
-        upload_html(storage_client, settings.reports_bucket, filename, html)
-
-        tokens_collection = get_report_tokens_collection()
-        token = create_report_token(tokens_collection, settings.reports_bucket, filename)
-
-        report_url = f"{settings.agent_public_url.rstrip('/')}/reports/{token}"
+        report_url = upload_report_and_get_link(
+            html, filename,
+            reports_bucket=settings.reports_bucket, agent_public_url=settings.agent_public_url,
+            storage_client_factory=storage_client_factory, get_report_tokens_collection=get_report_tokens_collection,
+        )
         return {"filename": filename, "report_url": report_url}
 
     @mcp.tool()

@@ -126,6 +126,67 @@ def _read_on_page_rows(sheets_client: Any, spreadsheet_id: str) -> list[dict]:
     return worksheet.get_all_records(head=4, default_blank="")
 
 
+_CLIENT_NAME_LABELS = {"client business name", "client name", "business name"}
+
+# Fixed allowlist of account-metadata labels safe to carry onto a session's
+# client_details — deliberately excludes anything login/credential-shaped
+# (Website Login URL/Username/Password) even though the tab is labeled
+# "DO NOT PUT CREDENTIALS HERE" — a workbook that ignores that convention
+# would otherwise land real credentials in MongoDB and potentially a shared
+# report link, so those rows are never read at all, regardless of label.
+_DETAIL_LABELS: dict[str, str] = {
+    "website url": "website",
+    "website": "website",
+    "package level": "package_level",
+    "project start date": "project_start_date",
+    "other services": "other_services",
+    "account manager": "account_manager",
+    "project manager": "project_manager",
+    "seo strategist": "seo_strategist",
+    "content strategist": "content_strategist",
+    "link builder": "link_builder",
+}
+
+
+def _extract_client_details(rows: list[list[str]]) -> dict:
+    client = ""
+    details: dict[str, str] = {}
+    for row in rows:
+        if len(row) < 2:
+            continue
+        label = str(row[0]).strip().lower().rstrip(":?")
+        value = str(row[1]).strip()
+        if not value:
+            continue
+        if label in _CLIENT_NAME_LABELS:
+            client = value
+        elif label in _DETAIL_LABELS:
+            details[_DETAIL_LABELS[label]] = value
+    return {"client": client, "details": details}
+
+
+def read_client_details(sheets_client: Any, spreadsheet_id: str, sheet: str = "Client Details") -> dict:
+    """Read the workbook's Client Details tab for the client's business
+    name (the authoritative source for what a legacy import should record
+    as the client name, rather than trusting whatever the specialist
+    happened to type) and a fixed allowlist of other account metadata
+    (website, package level, account/project manager, etc. — see
+    _DETAIL_LABELS) for PlanSession.client_details.
+
+    Returns {"client": "", "details": {}} if the tab is missing or doesn't
+    have any of the expected labels filled in — not every client workbook
+    has this tab, or has it filled in correctly.
+    """
+    import gspread
+
+    workbook = sheets_client.open_by_key(spreadsheet_id)
+    try:
+        worksheet = _find_worksheet(workbook, sheet)
+    except gspread.exceptions.WorksheetNotFound:
+        return {"client": "", "details": {}}
+    return _extract_client_details(worksheet.get_all_values())
+
+
 def list_workbook_months(sheets_client: Any, spreadsheet_id: str) -> list[str]:
     """Distinct "YYYY-MM" months found in the workbook's On-Page tab, in
     the order they first appear.

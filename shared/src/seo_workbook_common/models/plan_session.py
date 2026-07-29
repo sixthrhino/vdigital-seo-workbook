@@ -58,6 +58,15 @@ class PlanSession(BaseModel):
     requested_by: str | None = None
     status: SessionStatus = SessionStatus.DRAFT
     pages: list[Page] = Field(default_factory=list)
+    # Non-optimization account metadata (account manager, package level,
+    # website URL, etc.) — see legacy_import.workbook_sheets.read_client_details
+    # for the fixed allowlist of labels ever read into this. Deliberately
+    # never includes anything login/credential-shaped, regardless of what a
+    # client's workbook actually has in that tab — this ends up in MongoDB
+    # and potentially a shared report link, so it isn't a safe place for
+    # secrets even if a specific workbook ignores the "don't put
+    # credentials here" convention.
+    client_details: dict[str, str] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     finalized_at: datetime | None = None
 
