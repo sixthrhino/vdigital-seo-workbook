@@ -7,7 +7,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..best_practices import BestPracticeCatalog
 from ..models.plan_session import Page, PlanSession, TouchpointAnswer
-from .formatting import format_item, format_month, format_old_new
+from .formatting import format_item, format_month, format_old_new, format_optimizations_note
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -18,6 +18,7 @@ _env = Environment(
 _env.filters["format_item"] = format_item
 _env.filters["format_month"] = format_month
 _env.filters["format_old_new"] = format_old_new
+_env.filters["format_optimizations_note"] = format_optimizations_note
 
 # Title/meta/H1 get their own dedicated columns in the row-per-URL table
 # view (render_page_table_html) — everything else recorded on a page is
@@ -62,9 +63,13 @@ def _optimization_display(tp: TouchpointAnswer, resolve_name: Callable[[str], st
         # The bare name ("Optimizations") says nothing on its own — unlike
         # every other touchpoint here, there's no dedicated column showing
         # this one's actual content anywhere else in the table, so show
-        # the real imported text instead of just its label.
-        notes = [item.get("note", "") for item in tp.items if item.get("note")]
-        return "; ".join(notes) if notes else resolve_name(tp.touchpoint_id)
+        # the reformatted note (see format_optimizations_note) instead of
+        # just its label.
+        lines = [
+            line for item in tp.items
+            for line in format_optimizations_note(item.get("note", ""))
+        ]
+        return "; ".join(lines) if lines else resolve_name(tp.touchpoint_id)
     return resolve_name(tp.touchpoint_id)
 
 

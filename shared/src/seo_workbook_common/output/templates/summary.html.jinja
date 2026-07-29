@@ -23,6 +23,8 @@
   .value-pair .old-value { color: #b91c1c; text-decoration: line-through; }
   .value-pair .new-value { color: #14532d; font-weight: 600; }
   .value-extra { color: #777; font-size: 12px; margin-top: 2px; }
+  .note-lines { margin: 0; padding-left: 16px; }
+  .note-lines li { margin-bottom: 2px; }
   .fail { color: #b91c1c; }
   .pass { color: #15803d; }
   footer { margin-top: 24px; color: #999; font-size: 10px; }
@@ -79,6 +81,15 @@
                     {%- if item.primary_keyword and item.cta %} · {% endif -%}
                     {%- if item.cta %}CTA: {{ item.cta }}{% endif -%}
                   </div>
+                  {% endif %}
+                {% elif tp.touchpoint_id == "optimizations" %}
+                  {% set note_lines = (item.note or "") | format_optimizations_note %}
+                  {% if note_lines %}
+                  <ul class="note-lines">
+                    {% for line in note_lines %}
+                    <li>{{ line }}</li>
+                    {% endfor %}
+                  </ul>
                   {% endif %}
                 {% else %}
                   {{ item | format_item(tp.touchpoint_id) }}

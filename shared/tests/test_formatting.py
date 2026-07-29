@@ -1,4 +1,9 @@
-from seo_workbook_common.output.formatting import format_item, format_month, format_old_new
+from seo_workbook_common.output.formatting import (
+    format_item,
+    format_month,
+    format_old_new,
+    format_optimizations_note,
+)
 
 
 def test_title_tag_shows_new_and_old_and_keyword():
@@ -47,6 +52,90 @@ def test_unknown_touchpoint_falls_back_to_key_value_join():
 def test_optimizations_touchpoint_shows_the_raw_note_verbatim():
     result = format_item({"note": "Core Optimizations: Title Tag, Meta Description"}, "optimizations")
     assert result == "Core Optimizations: Title Tag, Meta Description"
+
+
+class TestFormatOptimizationsNote:
+    def test_empty_note_returns_empty_list(self):
+        assert format_optimizations_note("") == []
+        assert format_optimizations_note("   ") == []
+
+    def test_core_optimizations_extracted_as_its_own_line(self):
+        result = format_optimizations_note("Core Optimizations: Title Tag, Meta Description, H1.")
+        assert result == ["Core Optimizations: Title Tag, Meta Description, H1"]
+
+    def test_real_world_example_with_preamble_and_two_heading_levels(self):
+        # Verbatim (whitespace-collapsed, as actually stored — see
+        # converter.py) real North Texas Trailers example.
+        note = (
+            "Should not be a blog post. Core Optimizations: TItle Tag, Meta Description, H1. "
+            "Make Headers below an <H2> tag <H3> Why Choose North Texas Trailers? "
+            "Make Headers below an <H3> tag <H4> Expertise You Can Depend On: "
+            "<H4> Quality Parts, Every Time: <H4> Transparent Communication: <H4> Timely Execution:"
+        )
+        result = format_optimizations_note(note)
+        assert result == [
+            "Should not be a blog post.",
+            "Core Optimizations: TItle Tag, Meta Description, H1",
+            "H3: Why Choose North Texas Trailers?",
+            "H4: Expertise You Can Depend On",
+            "H4: Quality Parts, Every Time",
+            "H4: Transparent Communication",
+            "H4: Timely Execution",
+        ]
+
+    def test_real_world_example_with_no_preamble_and_one_heading_level(self):
+        note = (
+            "Core Optimizations: TItle Tag, Meta Description, H1. "
+            "Make Headers below an <H2> tag "
+            "<H3> Checking Over Your Trailer <H3> Equipment That Connects the Trailer and Vehicle "
+            "<H3> Emergency Equipment <H3> Wait Time and Braking <H3> Cargo Weight and Distribution "
+            "<H3> Route Restrictions <H3> Get Your Trailer From North Texas Trailers"
+        )
+        result = format_optimizations_note(note)
+        assert result == [
+            "Core Optimizations: TItle Tag, Meta Description, H1",
+            "H3: Checking Over Your Trailer",
+            "H3: Equipment That Connects the Trailer and Vehicle",
+            "H3: Emergency Equipment",
+            "H3: Wait Time and Braking",
+            "H3: Cargo Weight and Distribution",
+            "H3: Route Restrictions",
+            "H3: Get Your Trailer From North Texas Trailers",
+        ]
+
+    def test_tolerates_instruction_phrasing_with_no_an_or_tag_word(self):
+        # Real messier variant seen live: "Make Headers below <H2>" with
+        # neither "an" nor a trailing "tag" word.
+        note = "Core Optimizations: Title Tag. Make Headers below <H2> <H3> Understanding Trailer Springs <H3> Conclusion"
+        result = format_optimizations_note(note)
+        assert result == [
+            "Core Optimizations: Title Tag",
+            "H3: Understanding Trailer Springs",
+            "H3: Conclusion",
+        ]
+
+    def test_multiline_input_with_real_newlines_parses_the_same_way(self):
+        note = (
+            "Core Optimizations: Title Tag, Meta Description, H1.\n\n"
+            "Make Headers below an <H2> tag\n\n"
+            "<H3> Checking Over Your Trailer\n"
+            "<H3> Emergency Equipment\n"
+        )
+        result = format_optimizations_note(note)
+        assert result == [
+            "Core Optimizations: Title Tag, Meta Description, H1",
+            "H3: Checking Over Your Trailer",
+            "H3: Emergency Equipment",
+        ]
+
+    def test_plain_text_with_no_recognized_pattern_passes_through_unchanged(self):
+        assert format_optimizations_note("Added internal link to homepage.") == [
+            "Added internal link to homepage."
+        ]
+
+    def test_heading_only_note_with_no_core_optimizations_line(self):
+        note = "<H2> First Section <H2> Second Section"
+        assert format_optimizations_note(note) == ["H2: First Section", "H2: Second Section"]
 
 
 def test_format_month_renders_full_month_name_and_year():

@@ -1,9 +1,65 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 _SINGLE_VALUE_TOUCHPOINTS = {"title_tag", "meta_description", "h1_tag"}
 _INTERNAL_LINK_TOUCHPOINTS = {"internal_linking_to_other_pages_homepage", "internal_linking_to_target_page"}
+
+# Real-world legacy-workbook "optimizations" notes (see legacy_import/
+# converter.py) tend to follow a loose, recurring shape: a "Core
+# Optimizations: X, Y, Z." summary sentence, then one or more "Make Headers
+# below <H#> tag" instruction phrases each followed by the actual "<H#>
+# heading text" lines. The instruction phrase is redundant with each
+# heading's own explicit <H#> marker (and wording varies — "an <H2> tag",
+# bare "<H2>", no "tag" at all), so it's dropped rather than parsed for its
+# own sake; the marker itself is what's authoritative.
+_CORE_OPTIMIZATIONS_RE = re.compile(r"core optimizations:\s*([^.]+)\.?", re.I)
+_HEADER_INSTRUCTION_RE = re.compile(r"make headers?\s+below\s+(?:an?\s+)?<h[1-6]>\s*(?:tags?)?\.?", re.I)
+_HEADING_SEGMENT_RE = re.compile(r"<h([1-6])>\s*(.*?)(?=<h[1-6]>|$)", re.I | re.S)
+
+
+def format_optimizations_note(note: str) -> list[str]:
+    """Best-effort reformat of a legacy-imported "optimizations" touchpoint's
+    free-text note into standardized, readable lines instead of one run-on
+    blob — real examples are consistent enough (see module docstring) to
+    parse deterministically, without guessing at meaning the way an LLM
+    might. Any text that doesn't match a recognized pattern is preserved
+    verbatim as its own line rather than silently dropped, since this is a
+    display transform only — nothing here feeds back into what was
+    actually recorded.
+    """
+    if not note or not note.strip():
+        return []
+
+    text = note
+    lines: list[str] = []
+
+    core_match = _CORE_OPTIMIZATIONS_RE.search(text)
+    if core_match:
+        touchpoints = ", ".join(p.strip() for p in core_match.group(1).split(",") if p.strip())
+        if touchpoints:
+            lines.append(f"Core Optimizations: {touchpoints}")
+        text = text[: core_match.start()] + text[core_match.end() :]
+
+    text = _HEADER_INSTRUCTION_RE.sub(" ", text)
+
+    heading_lines: list[str] = []
+
+    def _collect_heading(match: re.Match) -> str:
+        level, heading_text = match.group(1), match.group(2).strip().rstrip(":").strip()
+        if heading_text:
+            heading_lines.append(f"H{level}: {heading_text}")
+        return " "
+
+    text = _HEADING_SEGMENT_RE.sub(_collect_heading, text)
+    lines.extend(heading_lines)
+
+    leftover = " ".join(text.split())
+    if leftover:
+        lines.insert(0, leftover)
+
+    return lines
 
 
 def format_month(month: str) -> str:
@@ -53,11 +109,11 @@ def format_item(item: dict[str, str], touchpoint_id: str) -> str:
         return alt
 
     if touchpoint_id == "optimizations":
-        # A legacy-workbook import's free-text "what was done" cell,
-        # preserved verbatim (see legacy_import/converter.py) rather than
-        # parsed into fabricated structure — there's no old/new pairing or
-        # other structured fields to show alongside it, just the note.
-        return item.get("note", "")
+        # A legacy-workbook import's free-text "what was done" cell — see
+        # format_optimizations_note for the standardized-line breakdown;
+        # joined into one line here since this function's contract is a
+        # single string (shared by Sheets/plain-text output).
+        return "; ".join(format_optimizations_note(item.get("note", "")))
 
     return "; ".join(f"{k}: {v}" for k, v in sorted(item.items()))
 
