@@ -7,16 +7,15 @@ _SINGLE_VALUE_TOUCHPOINTS = {"title_tag", "meta_description", "h1_tag"}
 _INTERNAL_LINK_TOUCHPOINTS = {"internal_linking_to_other_pages_homepage", "internal_linking_to_target_page"}
 
 # Real-world legacy-workbook "optimizations" notes (see legacy_import/
-# converter.py) tend to follow a loose, recurring shape: a "Core
-# Optimizations: X, Y, Z." summary sentence, then one or more "Make Headers
-# below <H#> tag" instruction phrases each followed by the actual "<H#>
-# heading text" lines. The instruction phrase is redundant with each
-# heading's own explicit <H#> marker (and wording varies — "an <H2> tag",
-# bare "<H2>", no "tag" at all), so it's dropped rather than parsed for its
-# own sake; the marker itself is what's authoritative.
+# converter.py) almost always open with a "Core Optimizations: X, Y, Z."
+# summary sentence. What follows it varies too much in real historical data
+# to parse reliably (bracket markers like "<H3> heading text", prose like
+# "Change H1: ... to an H2: tag.", and surely others not seen yet) — rather
+# than chase every phrasing variant (and risk garbling ones we get wrong),
+# only the summary sentence is reformatted; everything else is shown
+# verbatim as one cleaned-up paragraph and left to the browser's normal
+# word-wrap for readability.
 _CORE_OPTIMIZATIONS_RE = re.compile(r"core optimizations:\s*([^.]+)\.?", re.I)
-_HEADER_INSTRUCTION_RE = re.compile(r"make headers?\s+below\s+(?:an?\s+)?<h[1-6]>\s*(?:tags?)?\.?", re.I)
-_HEADING_SEGMENT_RE = re.compile(r"<h([1-6])>\s*(.*?)(?=<h[1-6]>|$)", re.I | re.S)
 
 # Title Tag/Meta Description/H1 already get their own dedicated old/new
 # display everywhere this note is shown (the table report's Title/Meta/H1
@@ -27,27 +26,19 @@ _REDUNDANT_CORE_OPTIMIZATIONS = {"title tag", "meta description", "h1", "h1 tag"
 
 
 def format_optimizations_note(note: str) -> list[str]:
-    """Best-effort reformat of a legacy-imported "optimizations" touchpoint's
-    free-text note into standardized, readable lines instead of one run-on
-    blob — real examples are consistent enough (see module docstring) to
-    parse deterministically, without guessing at meaning the way an LLM
-    might. Any text that doesn't match a recognized pattern is preserved
-    verbatim as its own line rather than silently dropped, since this is a
-    display transform only — nothing here feeds back into what was
-    actually recorded.
+    """Reformat a legacy-imported "optimizations" touchpoint's free-text
+    note for display: drop mentions of Title Tag/Meta Description/H1 from
+    its "Core Optimizations:" summary sentence (redundant with those
+    touchpoints' own dedicated display elsewhere), dropping the whole
+    sentence if nothing else was named alongside them. Everything else is
+    returned verbatim as a single cleaned-up (whitespace-collapsed)
+    paragraph — deliberately not parsed further; see module docstring for
+    why.
     """
     if not note or not note.strip():
         return []
 
     text = note
-    lines: list[str] = []
-
-    # A note can legitimately contain more than one "Core Optimizations:"
-    # sentence (e.g. two separate update blocks recorded in the same cell
-    # over time) — finding only the first (via .search) left every later
-    # one un-stripped, where it would bleed into whatever heading
-    # immediately preceded it instead of being recognized as its own
-    # sentence. .sub with a callback collects every occurrence.
     core_lines: list[str] = []
 
     def _collect_core(match: re.Match) -> str:
@@ -60,24 +51,11 @@ def format_optimizations_note(note: str) -> list[str]:
         return " "
 
     text = _CORE_OPTIMIZATIONS_RE.sub(_collect_core, text)
-    lines.extend(core_lines)
 
-    text = _HEADER_INSTRUCTION_RE.sub(" ", text)
-
-    heading_lines: list[str] = []
-
-    def _collect_heading(match: re.Match) -> str:
-        level, heading_text = match.group(1), match.group(2).strip().rstrip(":").strip()
-        if heading_text:
-            heading_lines.append(f"H{level}: {heading_text}")
-        return " "
-
-    text = _HEADING_SEGMENT_RE.sub(_collect_heading, text)
-    lines.extend(heading_lines)
-
+    lines = list(core_lines)
     leftover = " ".join(text.split())
     if leftover:
-        lines.insert(0, leftover)
+        lines.append(leftover)
 
     return lines
 

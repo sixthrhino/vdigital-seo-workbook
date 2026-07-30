@@ -73,9 +73,28 @@ class TestFormatOptimizationsNote:
         result = format_optimizations_note("Core Optimizations: Title Tag, Meta Description, H1.")
         assert result == []
 
-    def test_real_world_example_with_preamble_and_two_heading_levels(self):
+    def test_rest_of_note_is_shown_verbatim_as_one_paragraph_not_parsed(self):
+        # Deliberately NOT parsed into per-heading lines — real historical
+        # notes use too many different phrasings (bracket markers, "Change
+        # H1: ... to an H2: tag." prose, and surely others) to reconstruct
+        # reliably; trying produced garbled output on some of them. Only
+        # the Core Optimizations summary is special-cased; everything else
+        # is verbatim (whitespace-collapsed).
+        note = (
+            "Core Optimizations: Title Tag, Meta Description, H1. "
+            "Change H1: Signs to Look for and How to Maintain Your Trailer Suspension to an "
+            "H2: tag. Change H3: What is Trailer Suspension? to an H2: tag."
+        )
+        result = format_optimizations_note(note)
+        assert result == [
+            "Change H1: Signs to Look for and How to Maintain Your Trailer Suspension to an "
+            "H2: tag. Change H3: What is Trailer Suspension? to an H2: tag."
+        ]
+
+    def test_real_world_example_with_preamble_and_bracket_style_headings(self):
         # Verbatim (whitespace-collapsed, as actually stored — see
-        # converter.py) real North Texas Trailers example.
+        # converter.py) real North Texas Trailers example — shown as one
+        # paragraph rather than parsed per-heading (see module docstring).
         note = (
             "Should not be a blog post. Core Optimizations: TItle Tag, Meta Description, H1. "
             "Make Headers below an <H2> tag <H3> Why Choose North Texas Trailers? "
@@ -84,102 +103,27 @@ class TestFormatOptimizationsNote:
         )
         result = format_optimizations_note(note)
         assert result == [
-            "Should not be a blog post.",
-            "H3: Why Choose North Texas Trailers?",
-            "H4: Expertise You Can Depend On",
-            "H4: Quality Parts, Every Time",
-            "H4: Transparent Communication",
-            "H4: Timely Execution",
+            "Should not be a blog post. Make Headers below an <H2> tag <H3> Why Choose North "
+            "Texas Trailers? Make Headers below an <H3> tag <H4> Expertise You Can Depend On: "
+            "<H4> Quality Parts, Every Time: <H4> Transparent Communication: <H4> Timely Execution:"
         ]
 
-    def test_real_world_example_with_no_preamble_and_one_heading_level(self):
-        note = (
-            "Core Optimizations: TItle Tag, Meta Description, H1. "
-            "Make Headers below an <H2> tag "
-            "<H3> Checking Over Your Trailer <H3> Equipment That Connects the Trailer and Vehicle "
-            "<H3> Emergency Equipment <H3> Wait Time and Braking <H3> Cargo Weight and Distribution "
-            "<H3> Route Restrictions <H3> Get Your Trailer From North Texas Trailers"
-        )
-        result = format_optimizations_note(note)
-        assert result == [
-            "H3: Checking Over Your Trailer",
-            "H3: Equipment That Connects the Trailer and Vehicle",
-            "H3: Emergency Equipment",
-            "H3: Wait Time and Braking",
-            "H3: Cargo Weight and Distribution",
-            "H3: Route Restrictions",
-            "H3: Get Your Trailer From North Texas Trailers",
-        ]
-
-    def test_tolerates_instruction_phrasing_with_no_an_or_tag_word(self):
-        # Real messier variant seen live: "Make Headers below <H2>" with
-        # neither "an" nor a trailing "tag" word.
-        note = "Core Optimizations: Schema Markup. Make Headers below <H2> <H3> Understanding Trailer Springs <H3> Conclusion"
-        result = format_optimizations_note(note)
-        assert result == [
-            "Core Optimizations: Schema Markup",
-            "H3: Understanding Trailer Springs",
-            "H3: Conclusion",
-        ]
-
-    def test_multiline_input_with_real_newlines_parses_the_same_way(self):
-        note = (
-            "Core Optimizations: Title Tag, Meta Description, H1.\n\n"
-            "Make Headers below an <H2> tag\n\n"
-            "<H3> Checking Over Your Trailer\n"
-            "<H3> Emergency Equipment\n"
-        )
-        result = format_optimizations_note(note)
-        assert result == [
-            "H3: Checking Over Your Trailer",
-            "H3: Emergency Equipment",
-        ]
-
-    def test_plain_text_with_no_recognized_pattern_passes_through_unchanged(self):
+    def test_plain_text_with_no_core_optimizations_line_passes_through_unchanged(self):
         assert format_optimizations_note("Added internal link to homepage.") == [
             "Added internal link to homepage."
         ]
 
-    def test_heading_only_note_with_no_core_optimizations_line(self):
-        note = "<H2> First Section <H2> Second Section"
-        assert format_optimizations_note(note) == ["H2: First Section", "H2: Second Section"]
-
-    def test_multiple_core_optimizations_sentences_in_one_note_are_all_recognized(self):
-        # Real bug, caught live: a note with two "Core Optimizations:"
-        # sentences (e.g. two update blocks recorded in one cell) only had
-        # the first one stripped — the second bled into whatever heading
-        # immediately preceded it instead of being recognized as its own
-        # sentence, producing a garbled "H4: Timely Execution: Core
-        # Optimizations: ..." line.
-        note = (
-            "Should not be a blog post. Core Optimizations: TItle Tag, Meta Description, H1. "
-            "Make Headers below an <H2> tag <H3> Why Choose North Texas Trailers? "
-            "Make Headers below an <H3> tag <H4> Expertise You Can Depend On: "
-            "<H4> Timely Execution: Core Optimizations: TItle Tag, Meta Description, H1. "
-            "Make Headers below an <H2> tag <H3> Checking Over Your Trailer"
-        )
-        result = format_optimizations_note(note)
-        assert result == [
-            "Should not be a blog post.",
-            "H3: Why Choose North Texas Trailers?",
-            "H4: Expertise You Can Depend On",
-            "H4: Timely Execution",
-            "H3: Checking Over Your Trailer",
-        ]
-
-    def test_multiple_core_optimizations_sentences_with_distinct_non_redundant_touchpoints(self):
-        # Confirms both sentences' surviving (non-redundant) touchpoints
-        # are kept, not just the first one's.
-        note = (
-            "Core Optimizations: Schema Markup. <H3> First "
-            "Core Optimizations: Internal Linking. <H3> Second"
-        )
+    def test_multiple_core_optimizations_sentences_are_all_recognized(self):
+        # A note can legitimately contain more than one "Core
+        # Optimizations:" sentence (e.g. two update blocks recorded in one
+        # cell) — every occurrence is found and reduced/dropped, not just
+        # the first.
+        note = "Core Optimizations: Schema Markup. Some notes. Core Optimizations: Internal Linking. More notes."
         result = format_optimizations_note(note)
         assert result == [
             "Core Optimizations: Schema Markup",
             "Core Optimizations: Internal Linking",
-            "H3: First",
-            "H3: Second",
+            "Some notes. More notes.",
         ]
 
 

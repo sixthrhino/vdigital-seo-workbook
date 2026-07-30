@@ -212,7 +212,7 @@ def test_render_page_table_html_optimizations_touchpoint_shows_note_text_not_raw
     assert "Core Optimizations: Schema Markup" in html
 
 
-def test_render_page_table_html_optimizations_column_renders_one_line_per_entry():
+def test_render_page_table_html_optimizations_column_drops_redundant_core_line():
     session = PlanSession(session_id="ntt-2026-07", client="North Texas Trailers", month="2026-07")
     page = session.add_page("https://northtexastrailers.com/blog/checking-over-your-trailer/")
     page.touchpoints.append(
@@ -228,11 +228,32 @@ def test_render_page_table_html_optimizations_column_renders_one_line_per_entry(
         )
     )
     html = render_page_table_html(session)
-    assert '<span class="optimization-line">H3: Checking Over Your Trailer</span>' in html
-    assert '<span class="optimization-line">H3: Emergency Equipment</span>' in html
     # Redundant with the dedicated Title/Meta/H1 columns — the whole
     # "Core Optimizations:" line is dropped, not shown as its own line.
     assert "Core Optimizations" not in html
+    # Everything else shown verbatim as one paragraph — deliberately not
+    # parsed into per-heading lines (see format_optimizations_note). HTML-
+    # escaped since it's rendered as text, not markup.
+    assert "&lt;H3&gt; Checking Over Your Trailer &lt;H3&gt; Emergency Equipment" in html
+
+
+def test_render_page_table_html_optimizations_column_renders_one_line_per_item():
+    # Distinct items on the same touchpoint (not the norm for a legacy
+    # import, which only ever creates one, but the shape allows it) each
+    # get their own line in the cell.
+    session = PlanSession(session_id="ntt-2026-07", client="North Texas Trailers", month="2026-07")
+    page = session.add_page("https://northtexastrailers.com/blog/checking-over-your-trailer/")
+    page.touchpoints.append(
+        TouchpointAnswer(
+            touchpoint_id="optimizations",
+            category="Optimizations",
+            items=[{"note": "First note."}, {"note": "Second note."}],
+            validation=ValidationResult(passed=True, messages=["Imported from legacy workbook"]),
+        )
+    )
+    html = render_page_table_html(session)
+    assert '<span class="optimization-line">First note.</span>' in html
+    assert '<span class="optimization-line">Second note.</span>' in html
 
 
 def test_render_summary_html_optimizations_touchpoint_shows_readable_name(sample_session):
