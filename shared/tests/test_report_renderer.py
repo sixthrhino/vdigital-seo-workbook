@@ -124,6 +124,39 @@ def test_render_page_table_html_includes_client_and_url(sample_session):
     assert "https://kyz.com/service-b/" in html
 
 
+def test_render_page_table_html_title_is_client_organic_seo_workbook(sample_session):
+    html = render_page_table_html(sample_session)
+    assert "<h1>KYZ - Organic SEO Workbook</h1>" in html
+
+
+def test_render_page_table_html_shows_client_details_when_present(sample_session):
+    sample_session.client_details = {
+        "website": "https://www.kyz.com",
+        "package_level": "Growth",
+        "seo_strategist": "Kevin L",
+    }
+    html = render_page_table_html(sample_session)
+    assert 'Main URL: <a href="https://www.kyz.com">https://www.kyz.com</a>' in html
+    assert "Package Level: Growth" in html
+    assert "SEO Strategist: Kevin L" in html
+
+
+def test_render_page_table_html_omits_client_details_fields_that_are_missing(sample_session):
+    sample_session.client_details = {"package_level": "Growth"}
+    html = render_page_table_html(sample_session)
+    assert "Package Level: Growth" in html
+    assert "Main URL:" not in html
+    assert "SEO Strategist:" not in html
+
+
+def test_render_page_table_html_no_client_details_block_when_empty(sample_session):
+    assert sample_session.client_details == {}
+    html = render_page_table_html(sample_session)
+    assert "Main URL:" not in html
+    assert "Package Level:" not in html
+    assert "SEO Strategist:" not in html
+
+
 def test_render_page_table_html_shows_keyword_with_volume_and_geo(sample_session):
     html = render_page_table_html(sample_session)
     assert "auto insurance (500)" in html
