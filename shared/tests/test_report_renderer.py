@@ -187,12 +187,29 @@ def test_render_page_table_html_shows_placeholder_for_untouched_title(sample_ses
     assert "—" in html
 
 
-def test_render_page_table_html_lists_other_touchpoints_in_optimizations_column(sample_session):
-    # sample_session's page has an h2_h3_h4_tags touchpoint — it should show
-    # up in the Optimizations column, not get its own dedicated column.
+def test_render_page_table_html_shows_heading_changes_in_optimizations_column(sample_session):
+    # sample_session's page has an h2_h3_h4_tags touchpoint with two items
+    # — their actual old/new levels and text should show up in the
+    # Optimizations column, not just the bare touchpoint name (there's no
+    # dedicated column for headings the way there is for Title/Meta/H1).
     catalog = load_catalog(CSV_PATH)
     html = render_page_table_html(sample_session, catalog=catalog)
-    assert "H2 / H3 / H4 tags" in html
+    assert '<span class="optimization-line">H4 → H3: Common Career Paths</span>' in html
+    assert '<span class="optimization-line">H4 → H3: How to use your GI benefits</span>' in html
+
+
+def test_render_page_table_html_heading_change_with_no_old_tag_shows_just_new_level():
+    session = PlanSession(session_id="kyz-2026-06", client="KYZ", month="2026-06")
+    page = session.add_page("https://kyz.com/a/")
+    page.touchpoints.append(
+        TouchpointAnswer(
+            touchpoint_id="h2_h3_h4_tags", category="Deep",
+            items=[{"new_tag": "h3", "heading_text": "Why Choose Us?"}],
+            validation=ValidationResult(passed=True),
+        )
+    )
+    html = render_page_table_html(session)
+    assert '<span class="optimization-line">H3: Why Choose Us?</span>' in html
 
 
 def test_render_page_table_html_optimizations_column_excludes_title_meta_h1():

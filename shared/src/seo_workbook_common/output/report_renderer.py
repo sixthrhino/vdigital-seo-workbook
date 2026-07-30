@@ -70,6 +70,14 @@ def _optimization_display_lines(tp: TouchpointAnswer, resolve_name: Callable[[st
             for line in format_optimizations_note(item.get("note", ""))
         ]
         return lines or [resolve_name(tp.touchpoint_id)]
+    if tp.touchpoint_id == "h2_h3_h4_tags":
+        # Same reasoning — headings don't get a dedicated column the way
+        # Title/Meta/H1 do (a page can have any number of them, unlike
+        # those single-value touchpoints), so the bare name alone would
+        # hide which headings actually changed. format_item already
+        # handles old_tag being optional ("H3: text" vs "H4 → H3: text").
+        lines = [format_item(item, tp.touchpoint_id) for item in tp.items]
+        return lines or [resolve_name(tp.touchpoint_id)]
     return [resolve_name(tp.touchpoint_id)]
 
 
@@ -109,8 +117,10 @@ def render_page_table_html(session: PlanSession, catalog: BestPracticeCatalog | 
     the legacy workbook's row layout than render_summary_html's per-
     touchpoint breakdown, for quickly scanning a whole month's planned
     changes across every page at once. Title/meta/H1 get dedicated
-    old/new columns (see format_old_new); every other recorded touchpoint
-    is summarized by name in a single "Optimizations" column.
+    old/new columns (see format_old_new); heading changes and free-text
+    notes get their actual content shown in the "Optimizations" column
+    (see _optimization_display_lines); every other recorded touchpoint is
+    summarized there by name only.
     """
     template = _env.get_template("page_table.html.jinja")
     rows = [_page_table_row(page, _touchpoint_name_resolver(catalog)) for page in session.pages]
