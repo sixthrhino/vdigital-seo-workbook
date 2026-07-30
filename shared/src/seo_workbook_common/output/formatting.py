@@ -94,9 +94,16 @@ def format_item(item: dict[str, str], touchpoint_id: str) -> str:
         return " | ".join(parts)
 
     if touchpoint_id == "h2_h3_h4_tags":
-        old_tag = item.get("old_tag", "?").upper()
+        # old_tag is optional (see validators.py) — the copy usually isn't
+        # changing, only the tag wrapping it, and the source often doesn't
+        # state what level a heading currently is. Shown as just the
+        # target level when there's no old one to compare against.
         new_tag = item.get("new_tag", "?").upper()
-        return f"{old_tag} → {new_tag}: {item.get('heading_text', '')}"
+        heading_text = item.get("heading_text", "")
+        old_tag = item.get("old_tag", "").upper()
+        if old_tag:
+            return f"{old_tag} → {new_tag}: {heading_text}"
+        return f"{new_tag}: {heading_text}"
 
     if touchpoint_id in _INTERNAL_LINK_TOUCHPOINTS:
         return f"\"{item.get('anchor_text', '')}\" → {item.get('target_url', '')}"
@@ -134,8 +141,9 @@ def format_old_new(item: dict[str, str], touchpoint_id: str) -> tuple[str, str] 
 
     if touchpoint_id == "h2_h3_h4_tags":
         heading_text = item.get("heading_text", "")
-        old_tag = item.get("old_tag", "?").upper()
         new_tag = item.get("new_tag", "?").upper()
-        return f"<{old_tag}> {heading_text}", f"<{new_tag}> {heading_text}"
+        old_tag = item.get("old_tag", "").upper()
+        old_display = f"<{old_tag}> {heading_text}" if old_tag else "—"
+        return old_display, f"<{new_tag}> {heading_text}"
 
     return None

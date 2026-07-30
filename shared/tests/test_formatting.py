@@ -25,6 +25,11 @@ def test_heading_change_shows_arrow():
     assert result == "H4 → H3: Common Career Paths"
 
 
+def test_heading_change_with_no_old_tag_shows_just_the_target_level():
+    result = format_item({"new_tag": "h3", "heading_text": "Common Career Paths"}, "h2_h3_h4_tags")
+    assert result == "H3: Common Career Paths"
+
+
 def test_internal_link_shows_anchor_and_target():
     result = format_item(
         {"anchor_text": "our FAQs", "target_url": "https://iecrm.org/faqs/"},
@@ -181,6 +186,11 @@ def test_format_old_new_heading_change_shows_same_text_at_both_levels():
         {"old_tag": "h4", "new_tag": "h3", "heading_text": "Common Career Paths"}, "h2_h3_h4_tags"
     )
     assert result == ("<H4> Common Career Paths", "<H3> Common Career Paths")
+
+
+def test_format_old_new_heading_change_with_no_old_tag_shows_placeholder_for_old():
+    result = format_old_new({"new_tag": "h3", "heading_text": "Common Career Paths"}, "h2_h3_h4_tags")
+    assert result == ("—", "<H3> Common Career Paths")
 
 
 def test_format_old_new_returns_none_for_internal_links():

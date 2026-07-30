@@ -103,6 +103,24 @@ def test_heading_change_requires_heading_text():
     assert any("heading_text" in m for m in result.messages)
 
 
+def test_heading_change_old_tag_is_optional():
+    # The copy usually isn't changing, only the tag wrapping it — and the
+    # source (a free-text note, a specialist who only knows the target
+    # level) often can't say what level a heading currently is.
+    result = validate_touchpoint(
+        "h2_h3_h4_tags", [{"new_tag": "h3", "heading_text": "Common Career Paths"}]
+    )
+    assert result.passed
+
+
+def test_heading_change_old_tag_is_still_validated_when_given():
+    result = validate_touchpoint(
+        "h2_h3_h4_tags", [{"old_tag": "bogus", "new_tag": "h3", "heading_text": "Common Career Paths"}]
+    )
+    assert not result.passed
+    assert any("old_tag" in m for m in result.messages)
+
+
 def test_internal_link_items_validated_independently():
     result = validate_touchpoint(
         "internal_linking_to_other_pages_homepage",

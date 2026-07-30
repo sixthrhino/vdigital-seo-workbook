@@ -72,11 +72,18 @@ def _check_heading_item(item: dict[str, str]) -> list[str]:
     """One heading promotion/demotion, e.g. {old_tag: h4, new_tag: h3,
     heading_text: "Common Career Paths"} — kept separate per heading so a
     batch of unrelated changes never collapses into one ambiguous blob.
+
+    old_tag is optional: the copy itself usually isn't changing, only the
+    tag wrapping it, and the source (a free-text note, a specialist who
+    only knows what a heading is *becoming*) often doesn't state what
+    level it currently is. new_tag and heading_text are still required —
+    without heading_text there's nothing to identify or verify the heading
+    by at all.
     """
     messages: list[str] = []
     old_tag = item.get("old_tag", "").lower()
     new_tag = item.get("new_tag", "").lower()
-    if old_tag not in _HEADING_TAGS:
+    if old_tag and old_tag not in _HEADING_TAGS:
         messages.append(f"old_tag must be one of {sorted(_HEADING_TAGS)}")
     if new_tag not in _HEADING_TAGS:
         messages.append(f"new_tag must be one of {sorted(_HEADING_TAGS)}")
