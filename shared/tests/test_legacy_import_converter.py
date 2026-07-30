@@ -109,8 +109,8 @@ def test_build_session_from_rows_preserves_opt_note_line_breaks():
             "geo": "",
             "opt_note": (
                 "Core Optimizations: Title Tag.\n\n"
-                "Make Headers below an <H2> tag\n\n"
-                "<H3> Why Choose Us?\n"
+                "Some general notes here.\n\n"
+                "More notes on a second line.\n"
             ),
             "old_title": "",
             "new_title": "",
@@ -124,9 +124,95 @@ def test_build_session_from_rows_preserves_opt_note_line_breaks():
     notes = session.pages[0].get_touchpoint("optimizations")
     assert notes.items[0]["note"] == (
         "Core Optimizations: Title Tag.\n\n"
-        "Make Headers below an <H2> tag\n\n"
-        "<H3> Why Choose Us?"
+        "Some general notes here.\n\n"
+        "More notes on a second line."
     )
+
+
+def test_build_session_from_rows_promotes_bracket_marker_headings_to_a_real_touchpoint():
+    # "<H#> heading text" is the one shape reliable enough to parse without
+    # fabricating structure (old_tag is never stated, but it's optional —
+    # see validators.py) — promoted to a real h2_h3_h4_tags touchpoint
+    # instead of staying free text.
+    rows = [
+        {
+            "url": "https://www.northtexastrailers.com/blog/trailer-springs/",
+            "keyword_raw": "",
+            "geo": "",
+            "opt_note": (
+                "Should not be a blog post.\n"
+                "Core Optimizations: Title Tag, Meta Description, H1.\n\n"
+                "Make Headers below an <H2> tag\n\n"
+                "<H3> Checking Over Your Trailer\n"
+                "<H3> Emergency Equipment"
+            ),
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("North Texas Trailers", "2026-07", rows)
+    page = session.pages[0]
+
+    headings = page.get_touchpoint("h2_h3_h4_tags")
+    assert headings is not None
+    assert headings.category == "Deep"
+    assert headings.items == [
+        {"new_tag": "h3", "heading_text": "Checking Over Your Trailer"},
+        {"new_tag": "h3", "heading_text": "Emergency Equipment"},
+    ]
+    assert headings.validation.passed is True
+
+    notes = page.get_touchpoint("optimizations")
+    assert "<H3>" not in notes.items[0]["note"]
+    assert "Should not be a blog post." in notes.items[0]["note"]
+    assert "Make Headers below an <H2> tag" in notes.items[0]["note"]
+
+
+def test_build_session_from_rows_heading_items_pass_real_validation():
+    from seo_workbook_common.validators import validate_touchpoint
+
+    rows = [
+        {
+            "url": "https://kyz.com/a/", "keyword_raw": "", "geo": "",
+            "opt_note": "<H3> Why Choose Us?",
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("KYZ", "2025-10", rows)
+    headings = session.pages[0].get_touchpoint("h2_h3_h4_tags")
+    assert validate_touchpoint("h2_h3_h4_tags", headings.items).passed is True
+
+
+def test_build_session_from_rows_no_optimizations_touchpoint_when_note_is_only_headings():
+    rows = [
+        {
+            "url": "https://kyz.com/a/", "keyword_raw": "", "geo": "",
+            "opt_note": "<H3> Why Choose Us?\n<H3> Our Services",
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("KYZ", "2025-10", rows)
+    page = session.pages[0]
+    assert page.get_touchpoint("h2_h3_h4_tags") is not None
+    assert page.get_touchpoint("optimizations") is None
+
+
+def test_build_session_from_rows_note_with_no_bracket_headings_is_untouched():
+    rows = [
+        {
+            "url": "https://kyz.com/a/", "keyword_raw": "", "geo": "",
+            "opt_note": "Change H1: Old Heading to an H2: tag.",
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("KYZ", "2025-10", rows)
+    page = session.pages[0]
+    assert page.get_touchpoint("h2_h3_h4_tags") is None
+    notes = page.get_touchpoint("optimizations")
+    assert notes.items[0]["note"] == "Change H1: Old Heading to an H2: tag."
 
 
 def test_build_session_from_rows_collapses_repeated_blank_lines_to_one():

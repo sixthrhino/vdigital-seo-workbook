@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from ..best_practices.loader import slugify
 from ..keywords import parse_keyword_target
 from ..models.plan_session import Page, PlanSession, SessionStatus, TouchpointAnswer, ValidationResult
@@ -36,6 +38,42 @@ def _normalize_note(raw: str) -> str:
     return "\n".join(normalized).strip()
 
 
+# A line that itself starts with a literal <H#> marker states its own
+# target level unambiguously — e.g. "<H3> Checking Over Your Trailer" —
+# unlike prose forms ("Change H1: ... to an H2: tag.") whose phrasing
+# varies too much across real historical notes to parse reliably (see
+# shared.output.formatting's module docstring for that history). Only this
+# one reliable shape is promoted to a real touchpoint at import time;
+# everything else stays free text. Duplicated from (not shared with)
+# seo_testing_agent.check_orchestrator._extract_inline_headings's literal-
+# marker branch, which recognizes the exact same shape for live-site QA —
+# small and stable enough that duplicating it beats a cross-component
+# import between otherwise-unrelated packages.
+_INLINE_HEADING_LINE_RE = re.compile(r"^<h([1-6])>\s*(\S.*)$", re.I)
+
+
+def _extract_heading_items(normalized_note: str) -> tuple[list[dict[str, str]], str]:
+    """Pull "<H#> heading text" lines out of an already-normalized note
+    into real h2_h3_h4_tags items — new_tag from the marker, heading_text
+    from the rest of the line. old_tag is deliberately omitted (it's
+    optional — see validators.py) rather than fabricated: this text states
+    what a heading is *becoming*, never what level it currently is.
+
+    Returns (heading_items, remaining_text) — matched lines are removed
+    from what's returned, so the same content doesn't end up duplicated in
+    the free-text "optimizations" fallback too.
+    """
+    heading_items: list[dict[str, str]] = []
+    remaining_lines: list[str] = []
+    for line in normalized_note.splitlines():
+        match = _INLINE_HEADING_LINE_RE.match(line)
+        if match:
+            heading_items.append({"new_tag": f"h{match.group(1)}", "heading_text": match.group(2).strip()})
+        else:
+            remaining_lines.append(line)
+    return heading_items, "\n".join(remaining_lines).strip()
+
+
 def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSession:
     """Convert one month's worth of legacy-workbook rows (as returned by
     workbook_sheets.get_month_rows) into a PlanSession.
@@ -45,9 +83,12 @@ def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSe
     columns become real title_tag/meta_description/h1_tag touchpoints
     (skipped when the "new" value is blank/"N/A"/"No changes"/unchanged
     from "old"). The free-text "opt_note" column mixes several kinds of
-    changes in unstructured prose per row — rather than risk
-    mis-parsing that into fabricated structure, it's preserved verbatim as
-    a single "optimizations" touchpoint per page. Every imported touchpoint
+    changes in unstructured prose per row — the one reliably parseable
+    shape within it ("<H#> heading text" lines) is promoted to a real
+    h2_h3_h4_tags touchpoint (see _extract_heading_items); everything else
+    is preserved verbatim as an "optimizations" touchpoint per page, rather
+    than risk mis-parsing prose whose phrasing varies too much across real
+    historical notes into fabricated structure. Every imported touchpoint
     is marked validation.passed=True with an explanatory message rather
     than run through today's validate_touchpoint rules, since this sheet
     didn't capture per-touchpoint primary_keyword/cta metadata and grading
@@ -94,13 +135,24 @@ def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSe
 
         notes_raw = (row.get("opt_note") or "").strip()
         if notes_raw:
-            page.touchpoints.append(
-                TouchpointAnswer(
-                    touchpoint_id="optimizations",
-                    category="Optimizations",
-                    items=[{"note": _normalize_note(notes_raw)}],
-                    validation=LEGACY_VALIDATION,
+            heading_items, remaining_note = _extract_heading_items(_normalize_note(notes_raw))
+            if heading_items:
+                page.touchpoints.append(
+                    TouchpointAnswer(
+                        touchpoint_id="h2_h3_h4_tags",
+                        category="Deep",
+                        items=heading_items,
+                        validation=LEGACY_VALIDATION,
+                    )
                 )
-            )
+            if remaining_note:
+                page.touchpoints.append(
+                    TouchpointAnswer(
+                        touchpoint_id="optimizations",
+                        category="Optimizations",
+                        items=[{"note": remaining_note}],
+                        validation=LEGACY_VALIDATION,
+                    )
+                )
 
     return session
