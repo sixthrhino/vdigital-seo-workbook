@@ -144,6 +144,44 @@ class TestFormatOptimizationsNote:
         note = "<H2> First Section <H2> Second Section"
         assert format_optimizations_note(note) == ["H2: First Section", "H2: Second Section"]
 
+    def test_multiple_core_optimizations_sentences_in_one_note_are_all_recognized(self):
+        # Real bug, caught live: a note with two "Core Optimizations:"
+        # sentences (e.g. two update blocks recorded in one cell) only had
+        # the first one stripped — the second bled into whatever heading
+        # immediately preceded it instead of being recognized as its own
+        # sentence, producing a garbled "H4: Timely Execution: Core
+        # Optimizations: ..." line.
+        note = (
+            "Should not be a blog post. Core Optimizations: TItle Tag, Meta Description, H1. "
+            "Make Headers below an <H2> tag <H3> Why Choose North Texas Trailers? "
+            "Make Headers below an <H3> tag <H4> Expertise You Can Depend On: "
+            "<H4> Timely Execution: Core Optimizations: TItle Tag, Meta Description, H1. "
+            "Make Headers below an <H2> tag <H3> Checking Over Your Trailer"
+        )
+        result = format_optimizations_note(note)
+        assert result == [
+            "Should not be a blog post.",
+            "H3: Why Choose North Texas Trailers?",
+            "H4: Expertise You Can Depend On",
+            "H4: Timely Execution",
+            "H3: Checking Over Your Trailer",
+        ]
+
+    def test_multiple_core_optimizations_sentences_with_distinct_non_redundant_touchpoints(self):
+        # Confirms both sentences' surviving (non-redundant) touchpoints
+        # are kept, not just the first one's.
+        note = (
+            "Core Optimizations: Schema Markup. <H3> First "
+            "Core Optimizations: Internal Linking. <H3> Second"
+        )
+        result = format_optimizations_note(note)
+        assert result == [
+            "Core Optimizations: Schema Markup",
+            "Core Optimizations: Internal Linking",
+            "H3: First",
+            "H3: Second",
+        ]
+
 
 def test_format_month_renders_full_month_name_and_year():
     assert format_month("2026-06") == "June 2026"

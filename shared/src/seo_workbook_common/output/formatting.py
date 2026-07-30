@@ -42,15 +42,25 @@ def format_optimizations_note(note: str) -> list[str]:
     text = note
     lines: list[str] = []
 
-    core_match = _CORE_OPTIMIZATIONS_RE.search(text)
-    if core_match:
+    # A note can legitimately contain more than one "Core Optimizations:"
+    # sentence (e.g. two separate update blocks recorded in the same cell
+    # over time) — finding only the first (via .search) left every later
+    # one un-stripped, where it would bleed into whatever heading
+    # immediately preceded it instead of being recognized as its own
+    # sentence. .sub with a callback collects every occurrence.
+    core_lines: list[str] = []
+
+    def _collect_core(match: re.Match) -> str:
         touchpoints = [
-            p.strip() for p in core_match.group(1).split(",")
+            p.strip() for p in match.group(1).split(",")
             if p.strip() and p.strip().lower() not in _REDUNDANT_CORE_OPTIMIZATIONS
         ]
         if touchpoints:
-            lines.append(f"Core Optimizations: {', '.join(touchpoints)}")
-        text = text[: core_match.start()] + text[core_match.end() :]
+            core_lines.append(f"Core Optimizations: {', '.join(touchpoints)}")
+        return " "
+
+    text = _CORE_OPTIMIZATIONS_RE.sub(_collect_core, text)
+    lines.extend(core_lines)
 
     text = _HEADER_INSTRUCTION_RE.sub(" ", text)
 
