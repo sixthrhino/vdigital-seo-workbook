@@ -296,6 +296,33 @@ async def test_record_page_from_text_parses_every_field(mcp_app):
         assert by_id["optimizations"]["category"] == "Optimizations"
 
 
+async def test_record_page_from_text_parses_headings_into_a_real_touchpoint(mcp_app):
+    async with Client(mcp_app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+
+        result = await client.call_tool(
+            "record_page_from_text",
+            {
+                "session_id": session_id,
+                "text": (
+                    "url: https://kyz.com/a/\n"
+                    "headings: H2 -> H3: Checking Over Your Trailer\n"
+                    "H3: Emergency Equipment\n"
+                    "notes: Added internal link to homepage."
+                ),
+            },
+        )
+
+        by_id = {tp["touchpoint_id"]: tp for tp in result.data["touchpoints"]}
+        assert by_id["h2_h3_h4_tags"]["items"] == [
+            {"old_tag": "h2", "new_tag": "h3", "heading_text": "Checking Over Your Trailer"},
+            {"new_tag": "h3", "heading_text": "Emergency Equipment"},
+        ]
+        assert by_id["h2_h3_h4_tags"]["validation"]["passed"] is True
+        assert by_id["optimizations"]["items"][0] == {"note": "Added internal link to homepage."}
+
+
 async def test_record_page_from_text_adds_the_page_automatically(mcp_app):
     async with Client(mcp_app) as client:
         session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})

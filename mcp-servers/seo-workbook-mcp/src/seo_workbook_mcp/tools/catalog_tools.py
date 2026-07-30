@@ -65,8 +65,10 @@ def register(mcp: FastMCP, catalog: BestPracticeCatalog) -> None:
                 "meta: <old meta description> -> <new meta description>\n"
                 "cta: <call to action text>\n"
                 "h1: <old H1> -> <new H1>\n"
-                "notes: <anything else — headings changed, links added, schema, "
-                "alt text, etc. Can span multiple lines, but must be the LAST line.>"
+                "headings: <H# -> H#: heading text, one per line — old level "
+                "optional, e.g. just \"H3: heading text\">\n"
+                "notes: <anything else — links added, schema, alt text, etc. "
+                "Can span multiple lines, but must be the LAST line.>"
             ),
             "example": (
                 "url: https://example.com/service-a/\n"
@@ -77,7 +79,9 @@ def register(mcp: FastMCP, catalog: BestPracticeCatalog) -> None:
                 "insurance in Scottsdale.\n"
                 "cta: Get a Quote\n"
                 "h1: Auto Insurance -> Auto Insurance in Scottsdale\n"
-                "notes: Added internal link to homepage, promoted two H3s to H2s"
+                "headings: H2 -> H3: Checking Over Your Trailer\n"
+                "H3: Emergency Equipment\n"
+                "notes: Added internal link to homepage"
             ),
             "notes": (
                 "Every field except url is optional. \"->\" (or the unicode arrow) "
@@ -85,8 +89,12 @@ def register(mcp: FastMCP, catalog: BestPracticeCatalog) -> None:
                 "often inside real title/meta text on its own. Omit the old side "
                 "for a brand-new page with nothing to compare against. keyword "
                 "auto-fills title/h1's required primary_keyword, so it only needs "
-                "to be given once. notes must be the last line — everything after "
-                "it becomes its value, including further line breaks. One block "
-                "per page — call record_page_from_text once per URL."
+                "to be given once. headings is the one multi-line field that "
+                "doesn't have to be last — one heading change per line, each "
+                "\"H# -> H#: text\" or just \"H#: text\" when the old level isn't "
+                "known; the block runs until the next recognized label. notes "
+                "must be the last line — everything after it becomes its value, "
+                "including further line breaks. One block per page — call "
+                "record_page_from_text once per URL."
             ),
         }

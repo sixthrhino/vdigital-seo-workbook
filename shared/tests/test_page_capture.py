@@ -115,3 +115,74 @@ def test_arrow_with_empty_old_side_treated_as_new_only():
     result = parse_page_capture("url: https://example.com/a/\ntitle: -> New Title")
     assert result.title_old is None
     assert result.title_new == "New Title"
+
+
+def test_no_headings_label_leaves_heading_items_empty():
+    result = parse_page_capture("url: https://example.com/a/")
+    assert result.heading_items == []
+
+
+def test_headings_block_parses_old_and_new_tag_lines():
+    text = (
+        "url: https://example.com/a/\n"
+        "headings: H2 -> H3: Checking Over Your Trailer\n"
+        "H3: Emergency Equipment"
+    )
+    result = parse_page_capture(text)
+    assert result.heading_items == [
+        {"old_tag": "h2", "new_tag": "h3", "heading_text": "Checking Over Your Trailer"},
+        {"new_tag": "h3", "heading_text": "Emergency Equipment"},
+    ]
+
+
+def test_headings_unicode_arrow_also_works():
+    result = parse_page_capture("url: https://example.com/a/\nheadings: H2 → H3: Checking Over Your Trailer")
+    assert result.heading_items == [{"old_tag": "h2", "new_tag": "h3", "heading_text": "Checking Over Your Trailer"}]
+
+
+def test_headings_block_stops_at_the_next_recognized_label():
+    # headings doesn't have to be the last label — unlike notes, it should
+    # stop consuming lines once another recognized label line shows up.
+    text = (
+        "url: https://example.com/a/\n"
+        "headings: H3: Emergency Equipment\n"
+        "notes: Some free-form note."
+    )
+    result = parse_page_capture(text)
+    assert result.heading_items == [{"new_tag": "h3", "heading_text": "Emergency Equipment"}]
+    assert result.notes == "Some free-form note."
+
+
+def test_headings_block_can_come_before_or_after_other_single_line_labels():
+    text = (
+        "url: https://example.com/a/\n"
+        "headings: H3: Emergency Equipment\n"
+        "title: Old Title -> New Title"
+    )
+    result = parse_page_capture(text)
+    assert result.heading_items == [{"new_tag": "h3", "heading_text": "Emergency Equipment"}]
+    assert result.title_new == "New Title"
+
+
+def test_headings_block_skips_blank_lines_without_terminating():
+    text = (
+        "url: https://example.com/a/\n"
+        "headings: H2 -> H3: Checking Over Your Trailer\n"
+        "\n"
+        "H3: Emergency Equipment"
+    )
+    result = parse_page_capture(text)
+    assert result.heading_items == [
+        {"old_tag": "h2", "new_tag": "h3", "heading_text": "Checking Over Your Trailer"},
+        {"new_tag": "h3", "heading_text": "Emergency Equipment"},
+    ]
+
+
+def test_headings_block_ignores_unrecognized_lines_within_it():
+    text = (
+        "url: https://example.com/a/\n"
+        "headings: not a heading line at all\n"
+        "H3: Emergency Equipment"
+    )
+    result = parse_page_capture(text)
+    assert result.heading_items == [{"new_tag": "h3", "heading_text": "Emergency Equipment"}]

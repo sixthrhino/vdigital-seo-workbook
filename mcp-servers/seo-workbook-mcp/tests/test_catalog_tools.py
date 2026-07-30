@@ -53,4 +53,5 @@ async def test_get_page_capture_format_example_is_actually_parseable(mcp_app):
     assert parsed.meta_old and parsed.meta_new
     assert parsed.cta == "Get a Quote"
     assert parsed.h1_old and parsed.h1_new
+    assert parsed.heading_items
     assert parsed.notes

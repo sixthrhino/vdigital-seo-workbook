@@ -197,10 +197,12 @@ def register(
             meta: Old meta description -> New meta description
             cta: Get a Quote
             h1: Old H1 -> New H1
-            notes: anything else — headings changed, links added, schema,
-              alt text, etc. Free text, can span multiple lines, but must
-              be the LAST label in the block (everything from "notes:" to
-              the end of the text becomes its value, line breaks and all).
+            headings: H2 -> H3: Checking Over Your Trailer
+              H3: Emergency Equipment
+            notes: anything else — links added, schema, alt text, etc.
+              Free text, can span multiple lines, but must be the LAST
+              label in the block (everything from "notes:" to the end of
+              the text becomes its value, line breaks and all).
 
         title/meta/h1 use "->" (or the unicode arrow) to separate old from
         new — never the bare word "to", which shows up too often inside
@@ -208,6 +210,15 @@ def register(
         "title: New Title Tag") for a brand-new page with nothing to
         compare against. keyword auto-fills each of title/h1's required
         primary_keyword, so it only needs to be given once, not per field.
+
+        headings is the one multi-line label that doesn't have to be last
+        — one heading change per line, each either "H# -> H#: heading
+        text" (old and new level both stated) or "H#: heading text" (new
+        level only, when the old level isn't known — that's fine, it's
+        optional). The block runs until the next recognized label (or the
+        end of the text). Becomes a real h2_h3_h4_tags touchpoint, not
+        free text.
+
         notes becomes the same free-text "optimizations" touchpoint
         category import_legacy_workbook uses for a legacy workbook's own
         notes column.
@@ -267,6 +278,9 @@ def register(
             if keyword_text:
                 item["primary_keyword"] = keyword_text
             _set_touchpoint("h1_tag", catalog.get("h1_tag").category, [item])
+
+        if parsed.heading_items:
+            _set_touchpoint("h2_h3_h4_tags", catalog.get("h2_h3_h4_tags").category, parsed.heading_items)
 
         if parsed.notes:
             _set_touchpoint("optimizations", "Optimizations", [{"note": parsed.notes}])

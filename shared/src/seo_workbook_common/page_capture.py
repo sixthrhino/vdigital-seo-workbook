@@ -17,17 +17,26 @@ of this):
     meta: Old meta description -> New meta description
     cta: Get a Quote
     h1: Old H1 -> New H1
+    headings: H2 -> H3: Checking Over Your Trailer
+      H3: Emergency Equipment
     notes: free text, can span multiple lines, must be the last label
 
 "->" (or the unicode arrow) separates old from new — not the bare word
 "to", which is common enough inside real title/meta text to false-split on
 ("Guide to Trailer Maintenance" has its own "to").
+
+"headings:" is the one multi-line label that isn't required to be last —
+one heading per line, each either "H# -> H#: heading text" (old and new
+level both stated) or "H#: heading text" (new level only — old_tag is left
+unset, same as when a legacy workbook note only states a bracket marker
+with nothing establishing its prior level). The block runs until the next
+recognized label line (or the end of the text if nothing follows).
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 _LABEL_LINE_RE = re.compile(r"^\s*([a-zA-Z][a-zA-Z0-9 ]*?)\s*:\s*(.*)$")
 
@@ -45,11 +54,40 @@ _LABEL_ALIASES: dict[str, str] = {
     "cta": "cta",
     "h1": "h1",
     "h1 tag": "h1",
+    "headings": "headings",
+    "heading": "headings",
+    "headings changed": "headings",
     "notes": "notes",
     "note": "notes",
 }
 
 _OLD_NEW_RE = re.compile(r"^(.*?)\s*(?:->|→)\s*(.+)$")
+
+# One heading-change entry per line within a "headings:" block — either
+# shape states the entry's own new level; only the first also states the
+# old one. Same tolerance for "->"/unicode arrow as title/meta/h1 above.
+_HEADING_OLD_NEW_RE = re.compile(r"^h([1-6])\s*(?:->|→)\s*h([1-6])\s*:\s*(.+)$", re.I)
+_HEADING_NEW_ONLY_RE = re.compile(r"^h([1-6])\s*:\s*(.+)$", re.I)
+
+
+def _parse_heading_items(block: str) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for line in block.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = _HEADING_OLD_NEW_RE.match(stripped)
+        if match:
+            items.append({
+                "old_tag": f"h{match.group(1)}",
+                "new_tag": f"h{match.group(2)}",
+                "heading_text": match.group(3).strip(),
+            })
+            continue
+        match = _HEADING_NEW_ONLY_RE.match(stripped)
+        if match:
+            items.append({"new_tag": f"h{match.group(1)}", "heading_text": match.group(2).strip()})
+    return items
 
 
 def _split_old_new(value: str) -> tuple[str | None, str]:
@@ -72,16 +110,21 @@ class ParsedPageCapture:
     cta: str | None = None
     h1_old: str | None = None
     h1_new: str | None = None
+    heading_items: list[dict[str, str]] = field(default_factory=list)
     notes: str | None = None
 
 
 def parse_page_capture(text: str) -> ParsedPageCapture:
     """Parse one page's labeled capture block into its fields.
 
-    Every label except "notes" is expected on a single line. "notes" runs
-    to the end of the text once encountered (so it must come last),
-    preserving its own line breaks — they're meaningful paragraph/section
-    structure, same reasoning as legacy_import.converter._normalize_note.
+    Every label except "headings" and "notes" is expected on a single
+    line. "headings" is a multi-line block — one heading-change entry per
+    line (see _parse_heading_items) — that runs until the next recognized
+    label line or the end of the text, so it doesn't have to be last.
+    "notes" runs to the true end of the text once encountered (so it must
+    come last), preserving its own line breaks — they're meaningful
+    paragraph/section structure, same reasoning as
+    legacy_import.converter._normalize_note.
 
     Raises ValueError if no "url:" line is found.
     """
@@ -101,6 +144,18 @@ def parse_page_capture(text: str) -> ParsedPageCapture:
         if label == "notes":
             fields["notes"] = "\n".join([value] + lines[i + 1 :]).strip()
             break
+        if label == "headings":
+            block_lines = [value] if value.strip() else []
+            j = i + 1
+            while j < len(lines):
+                next_match = _LABEL_LINE_RE.match(lines[j])
+                if next_match and _LABEL_ALIASES.get(next_match.group(1).strip().lower()) is not None:
+                    break
+                block_lines.append(lines[j])
+                j += 1
+            fields["headings"] = "\n".join(block_lines)
+            i = j
+            continue
         fields[label] = value.strip()
         i += 1
 
@@ -111,6 +166,7 @@ def parse_page_capture(text: str) -> ParsedPageCapture:
     title_old, title_new = _split_old_new(fields["title"]) if fields.get("title") else (None, None)
     meta_old, meta_new = _split_old_new(fields["meta"]) if fields.get("meta") else (None, None)
     h1_old, h1_new = _split_old_new(fields["h1"]) if fields.get("h1") else (None, None)
+    heading_items = _parse_heading_items(fields["headings"]) if fields.get("headings") else []
 
     return ParsedPageCapture(
         url=url,
@@ -123,5 +179,6 @@ def parse_page_capture(text: str) -> ParsedPageCapture:
         cta=fields.get("cta") or None,
         h1_old=h1_old,
         h1_new=h1_new or None,
+        heading_items=heading_items,
         notes=fields.get("notes") or None,
     )
