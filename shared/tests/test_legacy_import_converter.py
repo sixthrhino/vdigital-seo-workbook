@@ -98,6 +98,53 @@ def test_build_session_from_rows_preserves_opt_note_as_optimizations_touchpoint(
     assert notes.validation.passed is True
 
 
+def test_build_session_from_rows_preserves_opt_note_line_breaks():
+    # Line breaks are meaningful structure in the source cell (paragraph/
+    # section breaks) — needed to correctly read the note back, not
+    # incidental formatting to collapse away.
+    rows = [
+        {
+            "url": "https://kyz.com/a/",
+            "keyword_raw": "",
+            "geo": "",
+            "opt_note": (
+                "Core Optimizations: Title Tag.\n\n"
+                "Make Headers below an <H2> tag\n\n"
+                "<H3> Why Choose Us?\n"
+            ),
+            "old_title": "",
+            "new_title": "",
+            "old_meta": "",
+            "new_meta": "",
+            "old_h1": "",
+            "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("KYZ", "2025-10", rows)
+    notes = session.pages[0].get_touchpoint("optimizations")
+    assert notes.items[0]["note"] == (
+        "Core Optimizations: Title Tag.\n\n"
+        "Make Headers below an <H2> tag\n\n"
+        "<H3> Why Choose Us?"
+    )
+
+
+def test_build_session_from_rows_collapses_repeated_blank_lines_to_one():
+    rows = [
+        {
+            "url": "https://kyz.com/a/",
+            "keyword_raw": "",
+            "geo": "",
+            "opt_note": "First line.\n\n\n\nSecond line.",
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("KYZ", "2025-10", rows)
+    notes = session.pages[0].get_touchpoint("optimizations")
+    assert notes.items[0]["note"] == "First line.\n\nSecond line."
+
+
 def test_build_session_from_rows_merges_rows_for_the_same_url():
     rows = [
         {

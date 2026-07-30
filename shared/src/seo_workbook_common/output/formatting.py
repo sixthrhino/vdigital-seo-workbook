@@ -13,8 +13,11 @@ _INTERNAL_LINK_TOUCHPOINTS = {"internal_linking_to_other_pages_homepage", "inter
 # "Change H1: ... to an H2: tag.", and surely others not seen yet) — rather
 # than chase every phrasing variant (and risk garbling ones we get wrong),
 # only the summary sentence is reformatted; everything else is shown
-# verbatim as one cleaned-up paragraph and left to the browser's normal
-# word-wrap for readability.
+# verbatim, one display line per the note's own line breaks (see
+# legacy_import.converter._normalize_note — those breaks are preserved at
+# import time specifically so they survive to here, since they're the
+# cell's own paragraph/section structure, needed to read it back correctly,
+# not incidental formatting).
 _CORE_OPTIMIZATIONS_RE = re.compile(r"core optimizations:\s*([^.]+)\.?", re.I)
 
 # Title Tag/Meta Description/H1 already get their own dedicated old/new
@@ -31,9 +34,9 @@ def format_optimizations_note(note: str) -> list[str]:
     its "Core Optimizations:" summary sentence (redundant with those
     touchpoints' own dedicated display elsewhere), dropping the whole
     sentence if nothing else was named alongside them. Everything else is
-    returned verbatim as a single cleaned-up (whitespace-collapsed)
-    paragraph — deliberately not parsed further; see module docstring for
-    why.
+    returned verbatim, one entry per the note's own line breaks —
+    deliberately not parsed further (see module docstring for why); blank
+    lines are dropped rather than kept as empty entries.
     """
     if not note or not note.strip():
         return []
@@ -53,9 +56,10 @@ def format_optimizations_note(note: str) -> list[str]:
     text = _CORE_OPTIMIZATIONS_RE.sub(_collect_core, text)
 
     lines = list(core_lines)
-    leftover = " ".join(text.split())
-    if leftover:
-        lines.append(leftover)
+    for raw_line in text.splitlines():
+        cleaned = " ".join(raw_line.split())
+        if cleaned:
+            lines.append(cleaned)
 
     return lines
 

@@ -256,6 +256,25 @@ def test_render_page_table_html_optimizations_column_renders_one_line_per_item()
     assert '<span class="optimization-line">Second note.</span>' in html
 
 
+def test_render_page_table_html_note_line_breaks_render_as_separate_lines():
+    # A single item's own line breaks (preserved by
+    # legacy_import.converter._normalize_note at import time) split into
+    # separate lines in the cell too, not just distinct items.
+    session = PlanSession(session_id="ntt-2026-07", client="North Texas Trailers", month="2026-07")
+    page = session.add_page("https://northtexastrailers.com/blog/checking-over-your-trailer/")
+    page.touchpoints.append(
+        TouchpointAnswer(
+            touchpoint_id="optimizations",
+            category="Optimizations",
+            items=[{"note": "<H3> Checking Over Your Trailer\n<H3> Emergency Equipment"}],
+            validation=ValidationResult(passed=True, messages=["Imported from legacy workbook"]),
+        )
+    )
+    html = render_page_table_html(session)
+    assert '<span class="optimization-line">&lt;H3&gt; Checking Over Your Trailer</span>' in html
+    assert '<span class="optimization-line">&lt;H3&gt; Emergency Equipment</span>' in html
+
+
 def test_render_summary_html_optimizations_touchpoint_shows_readable_name(sample_session):
     sample_session.pages[0].touchpoints.append(
         TouchpointAnswer(

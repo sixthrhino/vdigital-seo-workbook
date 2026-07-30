@@ -19,6 +19,23 @@ def _clean(value: str | None) -> str | None:
     return None if v.lower() in _EMPTY_MARKERS else v
 
 
+def _normalize_note(raw: str) -> str:
+    """Clean up a free-text opt_note cell's whitespace without destroying
+    its line breaks — they're meaningful structure (the cell's own
+    paragraph/section breaks), needed to correctly read its content back,
+    not incidental formatting to collapse away. Only collapses repeated
+    whitespace *within* a line and repeated blank lines (down to one),
+    trimming each line's leading/trailing whitespace.
+    """
+    lines = [" ".join(line.split()) for line in raw.splitlines()]
+    normalized: list[str] = []
+    for line in lines:
+        if line == "" and normalized and normalized[-1] == "":
+            continue
+        normalized.append(line)
+    return "\n".join(normalized).strip()
+
+
 def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSession:
     """Convert one month's worth of legacy-workbook rows (as returned by
     workbook_sheets.get_month_rows) into a PlanSession.
@@ -81,7 +98,7 @@ def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSe
                 TouchpointAnswer(
                     touchpoint_id="optimizations",
                     category="Optimizations",
-                    items=[{"note": " ".join(notes_raw.split())}],
+                    items=[{"note": _normalize_note(notes_raw)}],
                     validation=LEGACY_VALIDATION,
                 )
             )

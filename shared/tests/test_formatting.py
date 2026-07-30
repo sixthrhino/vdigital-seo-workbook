@@ -73,13 +73,13 @@ class TestFormatOptimizationsNote:
         result = format_optimizations_note("Core Optimizations: Title Tag, Meta Description, H1.")
         assert result == []
 
-    def test_rest_of_note_is_shown_verbatim_as_one_paragraph_not_parsed(self):
+    def test_single_line_note_with_no_embedded_breaks_stays_one_entry(self):
         # Deliberately NOT parsed into per-heading lines — real historical
         # notes use too many different phrasings (bracket markers, "Change
         # H1: ... to an H2: tag." prose, and surely others) to reconstruct
         # reliably; trying produced garbled output on some of them. Only
-        # the Core Optimizations summary is special-cased; everything else
-        # is verbatim (whitespace-collapsed).
+        # the Core Optimizations summary is special-cased; a note with no
+        # line breaks of its own stays as one entry.
         note = (
             "Core Optimizations: Title Tag, Meta Description, H1. "
             "Change H1: Signs to Look for and How to Maintain Your Trailer Suspension to an "
@@ -91,22 +91,38 @@ class TestFormatOptimizationsNote:
             "H2: tag. Change H3: What is Trailer Suspension? to an H2: tag."
         ]
 
-    def test_real_world_example_with_preamble_and_bracket_style_headings(self):
-        # Verbatim (whitespace-collapsed, as actually stored — see
-        # converter.py) real North Texas Trailers example — shown as one
-        # paragraph rather than parsed per-heading (see module docstring).
+    def test_line_breaks_in_the_note_are_preserved_as_separate_entries(self):
+        # The note's own line breaks are meaningful section/paragraph
+        # structure — needed to correctly read it back — not incidental
+        # formatting, so each one becomes its own display entry rather
+        # than being collapsed into one run-on paragraph. Matches what
+        # legacy_import.converter._normalize_note actually stores.
         note = (
-            "Should not be a blog post. Core Optimizations: TItle Tag, Meta Description, H1. "
-            "Make Headers below an <H2> tag <H3> Why Choose North Texas Trailers? "
-            "Make Headers below an <H3> tag <H4> Expertise You Can Depend On: "
-            "<H4> Quality Parts, Every Time: <H4> Transparent Communication: <H4> Timely Execution:"
+            "Should not be a blog post.\n"
+            "Core Optimizations: TItle Tag, Meta Description, H1.\n\n"
+            "Make Headers below an <H2> tag\n\n"
+            "<H3> Why Choose North Texas Trailers?\n\n"
+            "Make Headers below an <H3> tag\n\n"
+            "<H4> Expertise You Can Depend On:\n"
+            "<H4> Quality Parts, Every Time:\n"
+            "<H4> Transparent Communication:\n"
+            "<H4> Timely Execution:"
         )
         result = format_optimizations_note(note)
         assert result == [
-            "Should not be a blog post. Make Headers below an <H2> tag <H3> Why Choose North "
-            "Texas Trailers? Make Headers below an <H3> tag <H4> Expertise You Can Depend On: "
-            "<H4> Quality Parts, Every Time: <H4> Transparent Communication: <H4> Timely Execution:"
+            "Should not be a blog post.",
+            "Make Headers below an <H2> tag",
+            "<H3> Why Choose North Texas Trailers?",
+            "Make Headers below an <H3> tag",
+            "<H4> Expertise You Can Depend On:",
+            "<H4> Quality Parts, Every Time:",
+            "<H4> Transparent Communication:",
+            "<H4> Timely Execution:",
         ]
+
+    def test_blank_lines_are_dropped_not_kept_as_empty_entries(self):
+        note = "First line.\n\n\nSecond line."
+        assert format_optimizations_note(note) == ["First line.", "Second line."]
 
     def test_plain_text_with_no_core_optimizations_line_passes_through_unchanged(self):
         assert format_optimizations_note("Added internal link to homepage.") == [
