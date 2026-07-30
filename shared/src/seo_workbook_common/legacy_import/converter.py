@@ -39,20 +39,21 @@ def _normalize_note(raw: str) -> str:
     return "\n".join(normalized).strip()
 
 
-# Two reliably parseable heading shapes seen in real historical notes —
+# Three reliably parseable heading shapes seen in real historical notes —
 # other prose forms ("Change H1: ... to an H2: tag." with no bracket
 # markers at all) vary too much to parse without risking fabricated
-# structure, so only these two are promoted to a real touchpoint at import
-# time; everything else stays free text.
+# structure, so only these three are promoted to a real touchpoint at
+# import time; everything else stays free text.
 #
 # 1. A line that itself starts with a literal <H#> marker states its own
 #    target level unambiguously — e.g. "<H3> Checking Over Your Trailer".
-#    Gives new_tag + heading_text only; old_tag is never stated (fine,
-#    it's optional — see validators.py). Duplicated from (not shared with)
-#    seo_testing_agent.check_orchestrator._extract_inline_headings's
-#    literal-marker branch, which recognizes the same shape for live-site
-#    QA — small and stable enough that duplicating it beats a
-#    cross-component import between otherwise-unrelated packages.
+#    Gives new_tag + heading_text only; old_tag is left absent unless a
+#    shape-3 instruction line (below) is currently in effect. Duplicated
+#    from (not shared with) seo_testing_agent.check_orchestrator.
+#    _extract_inline_headings's literal-marker branch, which recognizes the
+#    same shape for live-site QA — small and stable enough that duplicating
+#    it beats a cross-component import between otherwise-unrelated
+#    packages.
 _INLINE_HEADING_LINE_RE = re.compile(r"^<h([1-6])>\s*(\S.*)$", re.I)
 
 # 2. "Change <H#> heading text to an <H#> tag." — bracket markers *and* the
@@ -65,9 +66,22 @@ _CHANGE_HEADING_RE = re.compile(
     re.I,
 )
 
+# 3. "Make Headers below an <H#> tag" is its own standalone line stating
+#    the *current* (old) level of every shape-1 heading line that follows
+#    it, until either another such instruction line replaces it or the
+#    note ends — e.g. one "Make Headers below an <H2> tag" line followed by
+#    several bare "<H3> ..." lines means all of them are h2 -> h3. Same
+#    "an"/"tag(s)" optionality as shape 2. This is a stateful, cross-line
+#    read (unlike shapes 1-2, which match self-contained text), handled by
+#    the scan below rather than a single regex substitution.
+_HEADER_LEVEL_INSTRUCTION_RE = re.compile(
+    r"^make\s+headers?\s+below\s+(?:an?\s+)?<h([1-6])>\s*(?:tags?)?\.?$",
+    re.I,
+)
+
 
 def _extract_heading_items(normalized_note: str) -> tuple[list[dict[str, str]], str]:
-    """Pull recognized heading-change phrasing (see the two shapes above)
+    """Pull recognized heading-change phrasing (see the three shapes above)
     out of an already-normalized note into real h2_h3_h4_tags items, and
     reduce/remove its "Core Optimizations: Title Tag, Meta Description, H1"
     summary sentence (see reduce_core_optimizations_mentions) — so what's
@@ -91,18 +105,32 @@ def _extract_heading_items(normalized_note: str) -> tuple[list[dict[str, str]], 
     text = _CHANGE_HEADING_RE.sub(_collect_change, text)
 
     remaining_lines: list[str] = []
+    current_old_tag: str | None = None
     for line in text.splitlines():
-        match = _INLINE_HEADING_LINE_RE.match(line.strip())
-        if match:
-            heading_text = match.group(2).strip().rstrip(":").strip()
-            heading_items.append({"new_tag": f"h{match.group(1)}", "heading_text": heading_text})
+        stripped = line.strip()
+
+        instruction_match = _HEADER_LEVEL_INSTRUCTION_RE.match(stripped)
+        if instruction_match:
+            current_old_tag = f"h{instruction_match.group(1)}"
+            continue  # fully consumed into subsequent items' old_tag below
+
+        heading_match = _INLINE_HEADING_LINE_RE.match(stripped)
+        if heading_match:
+            item = {
+                "new_tag": f"h{heading_match.group(1)}",
+                "heading_text": heading_match.group(2).strip().rstrip(":").strip(),
+            }
+            if current_old_tag:
+                item["old_tag"] = current_old_tag
+            heading_items.append(item)
         else:
             remaining_lines.append(line)
 
     remaining = "\n".join(remaining_lines)
-    # Removing a Core Optimizations sentence or a "Change ... tag."
-    # sentence can leave blank lines behind — collapse those the same way
-    # _normalize_note already collapses repeated blank lines.
+    # Removing a Core Optimizations sentence, a "Change ... tag." sentence,
+    # or a "Make Headers below ..." instruction line can leave blank lines
+    # behind — collapse those the same way _normalize_note already
+    # collapses repeated blank lines.
     remaining = re.sub(r"\n{3,}", "\n\n", remaining).strip()
     return heading_items, remaining
 
@@ -116,9 +144,10 @@ def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSe
     columns become real title_tag/meta_description/h1_tag touchpoints
     (skipped when the "new" value is blank/"N/A"/"No changes"/unchanged
     from "old"). The free-text "opt_note" column mixes several kinds of
-    changes in unstructured prose per row — the one reliably parseable
-    shape within it ("<H#> heading text" lines) is promoted to a real
-    h2_h3_h4_tags touchpoint (see _extract_heading_items); everything else
+    changes in unstructured prose per row — the reliably parseable shapes
+    within it ("<H#> heading text" lines, optionally preceded by a "Make
+    Headers below an <H#> tag" line stating their old level) are promoted
+    to a real h2_h3_h4_tags touchpoint (see _extract_heading_items); everything else
     is preserved verbatim as an "optimizations" touchpoint per page, rather
     than risk mis-parsing prose whose phrasing varies too much across real
     historical notes into fabricated structure. Every imported touchpoint

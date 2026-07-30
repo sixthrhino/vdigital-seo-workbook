@@ -130,10 +130,10 @@ def test_build_session_from_rows_preserves_opt_note_line_breaks():
 
 
 def test_build_session_from_rows_promotes_bracket_marker_headings_to_a_real_touchpoint():
-    # "<H#> heading text" is the one shape reliable enough to parse without
-    # fabricating structure (old_tag is never stated, but it's optional —
-    # see validators.py) — promoted to a real h2_h3_h4_tags touchpoint
-    # instead of staying free text.
+    # "<H#> heading text" is reliable enough to parse without fabricating
+    # structure (old_tag is left absent when no instruction line precedes
+    # it, but it's optional — see validators.py) — promoted to a real
+    # h2_h3_h4_tags touchpoint instead of staying free text.
     rows = [
         {
             "url": "https://www.northtexastrailers.com/blog/trailer-springs/",
@@ -142,7 +142,6 @@ def test_build_session_from_rows_promotes_bracket_marker_headings_to_a_real_touc
             "opt_note": (
                 "Should not be a blog post.\n"
                 "Core Optimizations: Title Tag, Meta Description, H1.\n\n"
-                "Make Headers below an <H2> tag\n\n"
                 "<H3> Checking Over Your Trailer\n"
                 "<H3> Emergency Equipment"
             ),
@@ -165,10 +164,86 @@ def test_build_session_from_rows_promotes_bracket_marker_headings_to_a_real_touc
     notes = page.get_touchpoint("optimizations")
     assert "<H3>" not in notes.items[0]["note"]
     assert "Should not be a blog post." in notes.items[0]["note"]
-    assert "Make Headers below an <H2> tag" in notes.items[0]["note"]
     # Redundant with the dedicated Title/Meta/H1 columns — stripped from
     # the *stored* note itself, not just filtered when a report renders it.
     assert "Core Optimizations" not in notes.items[0]["note"]
+
+
+def test_build_session_from_rows_make_headers_below_instruction_sets_old_tag_for_following_headings():
+    # "Make Headers below an <H#> tag" states the *current* level of every
+    # bracket-marked heading line that follows it, until the note ends or
+    # another such instruction replaces it — real historical notes state
+    # this once and then list several bare "<H#> ..." lines that all share
+    # that old level.
+    rows = [
+        {
+            "url": "https://www.northtexastrailers.com/blog/tow-smart/",
+            "keyword_raw": "", "geo": "",
+            "opt_note": (
+                "Core Optimizations: TItle Tag, Meta Description, H1.\n\n"
+                "Make Headers below an <H2> tag\n\n"
+                "<H3> Checking Over Your Trailer\n"
+                "<H3> Equipment That Connects the Trailer and Vehicle\n"
+                "<H3> Get Your Trailer From North Texas Trailers"
+            ),
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("North Texas Trailers", "2026-07", rows)
+    page = session.pages[0]
+
+    headings = page.get_touchpoint("h2_h3_h4_tags")
+    assert headings.items == [
+        {"old_tag": "h2", "new_tag": "h3", "heading_text": "Checking Over Your Trailer"},
+        {"old_tag": "h2", "new_tag": "h3", "heading_text": "Equipment That Connects the Trailer and Vehicle"},
+        {"old_tag": "h2", "new_tag": "h3", "heading_text": "Get Your Trailer From North Texas Trailers"},
+    ]
+
+    from seo_workbook_common.validators import validate_touchpoint
+    assert validate_touchpoint("h2_h3_h4_tags", headings.items).passed is True
+
+    # The instruction line itself is fully consumed (it's now captured as
+    # old_tag on the items above), so nothing is left over for this page.
+    assert page.get_touchpoint("optimizations") is None
+
+
+def test_build_session_from_rows_make_headers_below_instruction_resets_on_a_second_instruction():
+    # A second "Make Headers below an <H#> tag" line mid-note changes the
+    # old-tag context for everything after it — each instruction only
+    # applies to the headings between it and the next one (or note end).
+    rows = [
+        {
+            "url": "https://www.northtexastrailers.com/blog/expert-trailer-repair-services/",
+            "keyword_raw": "", "geo": "",
+            "opt_note": (
+                "Should not be a blog post.\n\n"
+                "Make Headers below an <H2> tag\n\n"
+                "<H3> Why Choose North Texas Trailers?\n\n"
+                "Make Headers below an <H3> tag\n\n"
+                "<H4> Expertise You Can Depend On:\n"
+                "<H4> Quality Parts, Every Time:\n"
+                "<H4> Transparent Communication:\n"
+                "<H4> Timely Execution:"
+            ),
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("North Texas Trailers", "2026-07", rows)
+    page = session.pages[0]
+
+    headings = page.get_touchpoint("h2_h3_h4_tags")
+    assert headings.items == [
+        {"old_tag": "h2", "new_tag": "h3", "heading_text": "Why Choose North Texas Trailers?"},
+        {"old_tag": "h3", "new_tag": "h4", "heading_text": "Expertise You Can Depend On"},
+        {"old_tag": "h3", "new_tag": "h4", "heading_text": "Quality Parts, Every Time"},
+        {"old_tag": "h3", "new_tag": "h4", "heading_text": "Transparent Communication"},
+        {"old_tag": "h3", "new_tag": "h4", "heading_text": "Timely Execution"},
+    ]
+
+    notes = page.get_touchpoint("optimizations")
+    assert notes.items[0]["note"] == "Should not be a blog post."
 
 
 def test_build_session_from_rows_promotes_change_to_prose_with_old_and_new_tag():
