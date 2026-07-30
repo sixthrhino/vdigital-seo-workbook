@@ -121,6 +121,15 @@ def test_heading_change_old_tag_is_still_validated_when_given():
     assert any("old_tag" in m for m in result.messages)
 
 
+def test_heading_change_allows_h1_as_old_tag():
+    # A secondary/duplicate heading being demoted from H1 to H2 — distinct
+    # from the page's single official H1, which h1_tag tracks separately.
+    result = validate_touchpoint(
+        "h2_h3_h4_tags", [{"old_tag": "h1", "new_tag": "h2", "heading_text": "Signs to Look For"}]
+    )
+    assert result.passed
+
+
 def test_internal_link_items_validated_independently():
     result = validate_touchpoint(
         "internal_linking_to_other_pages_homepage",

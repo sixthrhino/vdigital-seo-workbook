@@ -108,7 +108,7 @@ def test_build_session_from_rows_preserves_opt_note_line_breaks():
             "keyword_raw": "",
             "geo": "",
             "opt_note": (
-                "Core Optimizations: Title Tag.\n\n"
+                "Core Optimizations: Schema Markup.\n\n"
                 "Some general notes here.\n\n"
                 "More notes on a second line.\n"
             ),
@@ -123,7 +123,7 @@ def test_build_session_from_rows_preserves_opt_note_line_breaks():
     session = build_session_from_rows("KYZ", "2025-10", rows)
     notes = session.pages[0].get_touchpoint("optimizations")
     assert notes.items[0]["note"] == (
-        "Core Optimizations: Title Tag.\n\n"
+        "Core Optimizations: Schema Markup\n\n"
         "Some general notes here.\n\n"
         "More notes on a second line."
     )
@@ -166,6 +166,44 @@ def test_build_session_from_rows_promotes_bracket_marker_headings_to_a_real_touc
     assert "<H3>" not in notes.items[0]["note"]
     assert "Should not be a blog post." in notes.items[0]["note"]
     assert "Make Headers below an <H2> tag" in notes.items[0]["note"]
+    # Redundant with the dedicated Title/Meta/H1 columns — stripped from
+    # the *stored* note itself, not just filtered when a report renders it.
+    assert "Core Optimizations" not in notes.items[0]["note"]
+
+
+def test_build_session_from_rows_promotes_change_to_prose_with_old_and_new_tag():
+    # "Change <H#> heading text to an <H#> tag." states the old level too
+    # (unlike the bare "<H#> text" shape), so old_tag is populated here.
+    rows = [
+        {
+            "url": "https://example.com/trailer-suspension/",
+            "keyword_raw": "", "geo": "",
+            "opt_note": (
+                "Core Optimizations: Title Tag, Meta Description, H1.\n\n"
+                "Change <H1> Signs to Look for and How to Maintain Your Trailer Suspension "
+                "to an <H2> tag.\n\n"
+                "Change <H3> What is Trailer Suspension? to an <H2> tag."
+            ),
+            "old_title": "", "new_title": "", "old_meta": "", "new_meta": "",
+            "old_h1": "", "new_h1": "",
+        }
+    ]
+    session = build_session_from_rows("Test", "2026-07", rows)
+    page = session.pages[0]
+
+    headings = page.get_touchpoint("h2_h3_h4_tags")
+    assert headings.items == [
+        {"old_tag": "h1", "new_tag": "h2", "heading_text": "Signs to Look for and How to Maintain Your Trailer Suspension"},
+        {"old_tag": "h3", "new_tag": "h2", "heading_text": "What is Trailer Suspension?"},
+    ]
+
+    from seo_workbook_common.validators import validate_touchpoint
+    assert validate_touchpoint("h2_h3_h4_tags", headings.items).passed is True
+
+    # Nothing non-redundant survived the Core Optimizations sentence, and
+    # both "Change ..." sentences were fully extracted — no optimizations
+    # touchpoint left at all.
+    assert page.get_touchpoint("optimizations") is None
 
 
 def test_build_session_from_rows_heading_items_pass_real_validation():

@@ -28,12 +28,31 @@ _CORE_OPTIMIZATIONS_RE = re.compile(r"core optimizations:\s*([^.]+)\.?", re.I)
 _REDUNDANT_CORE_OPTIMIZATIONS = {"title tag", "meta description", "h1", "h1 tag"}
 
 
+def reduce_core_optimizations_mentions(text: str) -> str:
+    """Reduce "Core Optimizations: X, Y, Z" sentences down to just their
+    non-redundant names (dropping Title Tag/Meta Description/H1 — see
+    _REDUNDANT_CORE_OPTIMIZATIONS), or remove the whole sentence if every
+    name mentioned is redundant. Used both at display time
+    (format_optimizations_note, below) and at import time
+    (legacy_import.converter, so the *stored* note is already clean, not
+    just what's rendered) — kept in one place so the two can't drift.
+    """
+
+    def _collect(match: re.Match) -> str:
+        names = [
+            p.strip() for p in match.group(1).split(",")
+            if p.strip() and p.strip().lower() not in _REDUNDANT_CORE_OPTIMIZATIONS
+        ]
+        return f"Core Optimizations: {', '.join(names)}" if names else ""
+
+    return _CORE_OPTIMIZATIONS_RE.sub(_collect, text)
+
+
 def format_optimizations_note(note: str) -> list[str]:
     """Reformat a legacy-imported "optimizations" touchpoint's free-text
-    note for display: drop mentions of Title Tag/Meta Description/H1 from
-    its "Core Optimizations:" summary sentence (redundant with those
-    touchpoints' own dedicated display elsewhere), dropping the whole
-    sentence if nothing else was named alongside them. Everything else is
+    note for display: reduce/remove its "Core Optimizations:" summary
+    sentence (see reduce_core_optimizations_mentions — redundant with
+    Title/Meta/H1's own dedicated display elsewhere). Everything else is
     returned verbatim, one entry per the note's own line breaks —
     deliberately not parsed further (see module docstring for why); blank
     lines are dropped rather than kept as empty entries.
@@ -41,21 +60,8 @@ def format_optimizations_note(note: str) -> list[str]:
     if not note or not note.strip():
         return []
 
-    text = note
-    core_lines: list[str] = []
-
-    def _collect_core(match: re.Match) -> str:
-        touchpoints = [
-            p.strip() for p in match.group(1).split(",")
-            if p.strip() and p.strip().lower() not in _REDUNDANT_CORE_OPTIMIZATIONS
-        ]
-        if touchpoints:
-            core_lines.append(f"Core Optimizations: {', '.join(touchpoints)}")
-        return " "
-
-    text = _CORE_OPTIMIZATIONS_RE.sub(_collect_core, text)
-
-    lines = list(core_lines)
+    text = reduce_core_optimizations_mentions(note)
+    lines: list[str] = []
     for raw_line in text.splitlines():
         cleaned = " ".join(raw_line.split())
         if cleaned:

@@ -3,6 +3,7 @@ from seo_workbook_common.output.formatting import (
     format_month,
     format_old_new,
     format_optimizations_note,
+    reduce_core_optimizations_mentions,
 )
 
 
@@ -137,14 +138,15 @@ class TestFormatOptimizationsNote:
     def test_multiple_core_optimizations_sentences_are_all_recognized(self):
         # A note can legitimately contain more than one "Core
         # Optimizations:" sentence (e.g. two update blocks recorded in one
-        # cell) — every occurrence is found and reduced/dropped, not just
-        # the first.
-        note = "Core Optimizations: Schema Markup. Some notes. Core Optimizations: Internal Linking. More notes."
+        # cell, each on its own line as real notes actually look) — every
+        # occurrence is found and reduced/dropped, not just the first.
+        note = "Core Optimizations: Schema Markup.\nSome notes.\nCore Optimizations: Internal Linking.\nMore notes."
         result = format_optimizations_note(note)
         assert result == [
             "Core Optimizations: Schema Markup",
+            "Some notes.",
             "Core Optimizations: Internal Linking",
-            "Some notes. More notes.",
+            "More notes.",
         ]
 
 
@@ -207,3 +209,21 @@ def test_format_old_new_returns_none_for_canonical_tags():
 
 def test_format_old_new_returns_none_for_unknown_touchpoint():
     assert format_old_new({"a": "1"}, "geo_keywords") is None
+
+
+class TestReduceCoreOptimizationsMentions:
+    def test_drops_sentence_when_only_redundant_names_present(self):
+        assert reduce_core_optimizations_mentions("Core Optimizations: Title Tag, Meta Description, H1.") == ""
+
+    def test_reduces_to_non_redundant_names_only(self):
+        result = reduce_core_optimizations_mentions("Core Optimizations: Title Tag, Schema Markup.")
+        assert result == "Core Optimizations: Schema Markup"
+
+    def test_leaves_surrounding_text_untouched(self):
+        result = reduce_core_optimizations_mentions(
+            "Some preamble.\nCore Optimizations: Title Tag, Meta Description, H1.\nMore notes."
+        )
+        assert result == "Some preamble.\n\nMore notes."
+
+    def test_text_with_no_core_optimizations_sentence_is_unchanged(self):
+        assert reduce_core_optimizations_mentions("Just some notes.") == "Just some notes."

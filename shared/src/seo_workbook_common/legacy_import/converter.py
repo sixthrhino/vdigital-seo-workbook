@@ -5,6 +5,7 @@ import re
 from ..best_practices.loader import slugify
 from ..keywords import parse_keyword_target
 from ..models.plan_session import Page, PlanSession, SessionStatus, TouchpointAnswer, ValidationResult
+from ..output.formatting import reduce_core_optimizations_mentions
 
 _EMPTY_MARKERS = {"", "n/a", "na", "no changes", "no change", "description is missing!", "missing"}
 
@@ -38,40 +39,72 @@ def _normalize_note(raw: str) -> str:
     return "\n".join(normalized).strip()
 
 
-# A line that itself starts with a literal <H#> marker states its own
-# target level unambiguously — e.g. "<H3> Checking Over Your Trailer" —
-# unlike prose forms ("Change H1: ... to an H2: tag.") whose phrasing
-# varies too much across real historical notes to parse reliably (see
-# shared.output.formatting's module docstring for that history). Only this
-# one reliable shape is promoted to a real touchpoint at import time;
-# everything else stays free text. Duplicated from (not shared with)
-# seo_testing_agent.check_orchestrator._extract_inline_headings's literal-
-# marker branch, which recognizes the exact same shape for live-site QA —
-# small and stable enough that duplicating it beats a cross-component
-# import between otherwise-unrelated packages.
+# Two reliably parseable heading shapes seen in real historical notes —
+# other prose forms ("Change H1: ... to an H2: tag." with no bracket
+# markers at all) vary too much to parse without risking fabricated
+# structure, so only these two are promoted to a real touchpoint at import
+# time; everything else stays free text.
+#
+# 1. A line that itself starts with a literal <H#> marker states its own
+#    target level unambiguously — e.g. "<H3> Checking Over Your Trailer".
+#    Gives new_tag + heading_text only; old_tag is never stated (fine,
+#    it's optional — see validators.py). Duplicated from (not shared with)
+#    seo_testing_agent.check_orchestrator._extract_inline_headings's
+#    literal-marker branch, which recognizes the same shape for live-site
+#    QA — small and stable enough that duplicating it beats a
+#    cross-component import between otherwise-unrelated packages.
 _INLINE_HEADING_LINE_RE = re.compile(r"^<h([1-6])>\s*(\S.*)$", re.I)
+
+# 2. "Change <H#> heading text to an <H#> tag." — bracket markers *and* the
+#    word "tag" are both optional in the wild ("to an <H2>" alone, or a
+#    missing "s" on "tags"), but the "change ... to a(n) ..." shape itself
+#    is consistent enough to trust. Gives old_tag, new_tag, *and*
+#    heading_text — better than shape 1, since the old level is stated.
+_CHANGE_HEADING_RE = re.compile(
+    r"change\s+<h([1-6])>\s*(.+?)\s+to\s+an?\s+<h([1-6])>\s*(?:tags?)?\.?",
+    re.I,
+)
 
 
 def _extract_heading_items(normalized_note: str) -> tuple[list[dict[str, str]], str]:
-    """Pull "<H#> heading text" lines out of an already-normalized note
-    into real h2_h3_h4_tags items — new_tag from the marker, heading_text
-    from the rest of the line. old_tag is deliberately omitted (it's
-    optional — see validators.py) rather than fabricated: this text states
-    what a heading is *becoming*, never what level it currently is.
+    """Pull recognized heading-change phrasing (see the two shapes above)
+    out of an already-normalized note into real h2_h3_h4_tags items, and
+    reduce/remove its "Core Optimizations: Title Tag, Meta Description, H1"
+    summary sentence (see reduce_core_optimizations_mentions) — so what's
+    actually *stored* as the fallback "optimizations" note is already
+    clean, not just what a report renders from it later.
 
-    Returns (heading_items, remaining_text) — matched lines are removed
-    from what's returned, so the same content doesn't end up duplicated in
-    the free-text "optimizations" fallback too.
+    Returns (heading_items, remaining_text) — matched text is removed from
+    what's returned, so none of it ends up duplicated in that fallback.
     """
     heading_items: list[dict[str, str]] = []
+
+    def _collect_change(match: re.Match) -> str:
+        heading_items.append({
+            "old_tag": f"h{match.group(1)}",
+            "new_tag": f"h{match.group(3)}",
+            "heading_text": match.group(2).strip().rstrip(":").strip(),
+        })
+        return ""
+
+    text = reduce_core_optimizations_mentions(normalized_note)
+    text = _CHANGE_HEADING_RE.sub(_collect_change, text)
+
     remaining_lines: list[str] = []
-    for line in normalized_note.splitlines():
-        match = _INLINE_HEADING_LINE_RE.match(line)
+    for line in text.splitlines():
+        match = _INLINE_HEADING_LINE_RE.match(line.strip())
         if match:
-            heading_items.append({"new_tag": f"h{match.group(1)}", "heading_text": match.group(2).strip()})
+            heading_text = match.group(2).strip().rstrip(":").strip()
+            heading_items.append({"new_tag": f"h{match.group(1)}", "heading_text": heading_text})
         else:
             remaining_lines.append(line)
-    return heading_items, "\n".join(remaining_lines).strip()
+
+    remaining = "\n".join(remaining_lines)
+    # Removing a Core Optimizations sentence or a "Change ... tag."
+    # sentence can leave blank lines behind — collapse those the same way
+    # _normalize_note already collapses repeated blank lines.
+    remaining = re.sub(r"\n{3,}", "\n\n", remaining).strip()
+    return heading_items, remaining
 
 
 def build_session_from_rows(client: str, month: str, rows: list[dict]) -> PlanSession:

@@ -65,7 +65,13 @@ def _check_canonical_tags_item(item: dict[str, str]) -> list[str]:
     return messages
 
 
-_HEADING_TAGS = {"h2", "h3", "h4"}
+# h1 is allowed here despite this touchpoint's own name (h2_h3_h4_tags) —
+# real historical notes describe a *secondary* heading being demoted from
+# H1 to H2 (a duplicate/mistaken H1 elsewhere on the page, distinct from
+# the page's single official H1, which the dedicated h1_tag touchpoint
+# already tracks). Confirmed live: "Change <H1> ... to an <H2> tag." is a
+# real recurring phrasing, not a hypothetical.
+_HEADING_TAGS = {"h1", "h2", "h3", "h4"}
 
 
 def _check_heading_item(item: dict[str, str]) -> list[str]:
