@@ -30,17 +30,35 @@ def to_chat_markup(text: str) -> str:
     return text
 
 
+ADDED_TO_SPACE_PROMPT = (
+    "I was just added to this space. Give me a short, friendly welcome "
+    "message introducing what you do and how to get started."
+)
+
+
 def extract_message(event: dict[str, Any]) -> tuple[str, str, str, str | None] | None:
     """Pull (session_key, user_id, message_text, thread_name) out of a
-    Google Chat MESSAGE event. Returns None for event types we don't act on
-    yet (space added/removed, card clicks, etc.) so the router can just ack
-    quietly.
+    Google Chat event. Returns None for event types we don't act on yet
+    (space removed, card clicks, etc.) so the router can just ack quietly.
+
+    ADDED_TO_SPACE is turned into a synthetic first turn (see
+    ADDED_TO_SPACE_PROMPT) rather than handled with a separate hardcoded
+    greeting string, so the actual agent (whichever one is configured —
+    the orchestrator or a standalone specialist) generates a real
+    introduction from its own instructions, which stays in sync with
+    whatever it actually does automatically.
 
     `thread_name` (e.g. "spaces/AAAA/threads/BBBB") is included, when
     present, so the async reply can be posted into the same thread instead
     of starting a new one.
     """
-    if event.get("type") != "MESSAGE":
+    event_type = event.get("type")
+    if event_type == "ADDED_TO_SPACE":
+        session_key = (event.get("space") or {}).get("name", "unknown-space")
+        user_id = (event.get("user") or {}).get("name", "unknown-user")
+        return session_key, user_id, ADDED_TO_SPACE_PROMPT, None
+
+    if event_type != "MESSAGE":
         return None
 
     message = event.get("message") or {}

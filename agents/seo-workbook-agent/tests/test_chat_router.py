@@ -172,12 +172,40 @@ def test_chat_ignores_non_message_events(monkeypatch):
     client, stub, fake_chat_service = _client(monkeypatch)
     with patch(VERIFY_PATH):
         response = client.post(
-            "/chat", headers={"Authorization": "Bearer faketoken"}, json={"type": "ADDED_TO_SPACE"}
+            "/chat", headers={"Authorization": "Bearer faketoken"}, json={"type": "REMOVED_FROM_SPACE"}
         )
     assert response.status_code == 200
     assert response.json() == {}
     assert stub.calls == []
     assert fake_chat_service.spaces_resource.messages_resource.create_calls == []
+
+
+def test_chat_added_to_space_runs_a_real_turn_and_posts_the_agents_own_greeting(monkeypatch):
+    # No hardcoded greeting on this side either — ADDED_TO_SPACE becomes a
+    # real agent turn (see chat_formatting.ADDED_TO_SPACE_PROMPT), so
+    # whatever the configured agent says is what gets posted back.
+    client, stub, fake_chat_service = _client(monkeypatch)
+    with patch(VERIFY_PATH):
+        response = client.post(
+            "/chat",
+            headers={"Authorization": "Bearer faketoken"},
+            json={
+                "type": "ADDED_TO_SPACE",
+                "space": {"name": "spaces/AAAA"},
+                "user": {"name": "users/123"},
+            },
+        )
+    assert response.status_code == 200
+    assert response.json() == {}
+    assert len(stub.calls) == 1
+    user_id, session_id, message = stub.calls[0]
+    assert user_id == "users/123"
+    assert session_id == "spaces/AAAA"
+    assert "welcome" in message.lower()
+
+    call = fake_chat_service.spaces_resource.messages_resource.create_calls[0]
+    assert call["parent"] == "spaces/AAAA"
+    assert call["body"]["text"] == stub.reply
 
 
 def test_chat_ignores_blank_message_text(monkeypatch):

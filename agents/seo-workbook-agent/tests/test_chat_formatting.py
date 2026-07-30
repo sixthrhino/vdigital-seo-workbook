@@ -1,4 +1,4 @@
-from seo_workbook_agent.chat_formatting import extract_message, to_chat_markup
+from seo_workbook_agent.chat_formatting import ADDED_TO_SPACE_PROMPT, extract_message, to_chat_markup
 
 
 def test_extract_message_parses_message_event():
@@ -22,7 +22,27 @@ def test_extract_message_includes_thread_name_when_present():
 
 
 def test_extract_message_ignores_non_message_events():
-    assert extract_message({"type": "ADDED_TO_SPACE"}) is None
+    assert extract_message({"type": "REMOVED_FROM_SPACE"}) is None
+    assert extract_message({"type": "CARD_CLICKED"}) is None
+
+
+def test_extract_message_turns_added_to_space_into_a_synthetic_greeting_turn():
+    # No hardcoded greeting string here — this feeds into the same agent
+    # turn as a real message, so whichever agent is actually configured
+    # (orchestrator or a standalone specialist) introduces itself using
+    # its own instructions.
+    event = {
+        "type": "ADDED_TO_SPACE",
+        "space": {"name": "spaces/AAAA"},
+        "user": {"name": "users/123"},
+    }
+    assert extract_message(event) == ("spaces/AAAA", "users/123", ADDED_TO_SPACE_PROMPT, None)
+
+
+def test_extract_message_added_to_space_defaults_missing_fields():
+    assert extract_message({"type": "ADDED_TO_SPACE"}) == (
+        "unknown-space", "unknown-user", ADDED_TO_SPACE_PROMPT, None,
+    )
 
 
 def test_extract_message_defaults_missing_fields():
