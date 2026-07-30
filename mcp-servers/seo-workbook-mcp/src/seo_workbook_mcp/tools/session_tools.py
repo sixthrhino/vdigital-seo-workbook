@@ -8,6 +8,7 @@ from seo_workbook_common.best_practices import BestPracticeCatalog
 from seo_workbook_common.best_practices.loader import slugify
 from seo_workbook_common.keywords import parse_keyword_target
 from seo_workbook_common.models.plan_session import PlanSession, SessionStatus, TouchpointAnswer
+from seo_workbook_common.page_capture import parse_page_capture
 from seo_workbook_common.storage import build_mongo_collection, save_session
 from seo_workbook_common.validators import validate_touchpoint
 
@@ -177,6 +178,101 @@ def register(
 
         _persist(session)
         return answer.model_dump(mode="json")
+
+    @mcp.tool()
+    def record_page_from_text(session_id: str, text: str) -> dict:
+        """Record (or update) one page's month of changes from a single
+        labeled text block, instead of one add_page/set_page_targeting/
+        record_touchpoint call per field — for when the specialist already
+        has their notes organized and wants to hand a whole page over at
+        once. One page per call; for several pages, call this once per URL.
+
+        Expected format — one "label: value" per line, all optional except
+        url:
+
+            url: https://example.com/service-a/
+            keyword: auto insurance (500)
+            geo: Scottsdale, AZ
+            title: Old Title Tag -> New Title Tag
+            meta: Old meta description -> New meta description
+            cta: Get a Quote
+            h1: Old H1 -> New H1
+            notes: anything else — headings changed, links added, schema,
+              alt text, etc. Free text, can span multiple lines, but must
+              be the LAST label in the block (everything from "notes:" to
+              the end of the text becomes its value, line breaks and all).
+
+        title/meta/h1 use "->" (or the unicode arrow) to separate old from
+        new — never the bare word "to", which shows up too often inside
+        real title/meta text on its own. Omit the old side (e.g. just
+        "title: New Title Tag") for a brand-new page with nothing to
+        compare against. keyword auto-fills each of title/h1's required
+        primary_keyword, so it only needs to be given once, not per field.
+        notes becomes the same free-text "optimizations" touchpoint
+        category import_legacy_workbook uses for a legacy workbook's own
+        notes column.
+
+        Adds the page first if it isn't already in the session — no need
+        to call add_page separately first. Calling this again for the same
+        URL only touches the fields present in the new text; touchpoints
+        not mentioned are left exactly as they were, same as record_touchpoint.
+
+        Returns the page's current state, including each touched
+        touchpoint's validation result (e.g. a meta given with no cta) —
+        relay any failures back conversationally, the same as
+        record_touchpoint.
+        """
+        session = store.get(session_id)
+        parsed = parse_page_capture(text)
+
+        page = session.get_page(parsed.url)
+        if page is None:
+            page = session.add_page(parsed.url)
+
+        if parsed.keyword is not None:
+            page.keyword_target = parse_keyword_target(parsed.keyword)
+        if parsed.geo is not None:
+            page.geo = parsed.geo
+
+        keyword_text = page.keyword_target.keyword if page.keyword_target else None
+
+        def _set_touchpoint(touchpoint_id: str, category: str, items: list[dict[str, str]]) -> None:
+            validation = validate_touchpoint(touchpoint_id, items)
+            answer = TouchpointAnswer(touchpoint_id=touchpoint_id, category=category, items=items, validation=validation)
+            existing = page.get_touchpoint(touchpoint_id)
+            if existing is not None:
+                page.touchpoints.remove(existing)
+            page.touchpoints.append(answer)
+
+        if parsed.title_new:
+            item = {"new_value": parsed.title_new}
+            if parsed.title_old:
+                item["old_value"] = parsed.title_old
+            if keyword_text:
+                item["primary_keyword"] = keyword_text
+            _set_touchpoint("title_tag", catalog.get("title_tag").category, [item])
+
+        if parsed.meta_new:
+            item = {"new_value": parsed.meta_new}
+            if parsed.meta_old:
+                item["old_value"] = parsed.meta_old
+            if parsed.cta:
+                item["cta"] = parsed.cta
+            _set_touchpoint("meta_description", catalog.get("meta_description").category, [item])
+
+        if parsed.h1_new:
+            item = {"new_value": parsed.h1_new}
+            if parsed.h1_old:
+                item["old_value"] = parsed.h1_old
+            if keyword_text:
+                item["primary_keyword"] = keyword_text
+            _set_touchpoint("h1_tag", catalog.get("h1_tag").category, [item])
+
+        if parsed.notes:
+            _set_touchpoint("optimizations", "Optimizations", [{"note": parsed.notes}])
+
+        _persist(session)
+        return page.model_dump(mode="json")
 
     @mcp.tool()
     def list_open_questions(session_id: str) -> list[str]:

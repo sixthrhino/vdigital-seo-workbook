@@ -253,6 +253,131 @@ async def test_record_touchpoint_unknown_touchpoint_raises(mcp_app):
             )
 
 
+async def test_record_page_from_text_parses_every_field(mcp_app):
+    async with Client(mcp_app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+
+        result = await client.call_tool(
+            "record_page_from_text",
+            {
+                "session_id": session_id,
+                "text": (
+                    "url: https://kyz.com/a/\n"
+                    "keyword: auto insurance (500)\n"
+                    "geo: Scottsdale, AZ\n"
+                    "title: Old Title -> New Title\n"
+                    "meta: Old meta -> New meta\n"
+                    "cta: Get a Quote\n"
+                    "h1: Old H1 -> New H1\n"
+                    "notes: Added internal link to homepage."
+                ),
+            },
+        )
+
+        page = result.data
+        assert page["url"] == "https://kyz.com/a/"
+        assert page["keyword_target"]["keyword"] == "auto insurance"
+        assert page["keyword_target"]["search_volume"] == 500
+        assert page["geo"] == "Scottsdale, AZ"
+
+        by_id = {tp["touchpoint_id"]: tp for tp in page["touchpoints"]}
+        assert by_id["title_tag"]["items"][0] == {
+            "new_value": "New Title", "old_value": "Old Title", "primary_keyword": "auto insurance",
+        }
+        assert by_id["title_tag"]["category"] == "Core"
+        assert by_id["meta_description"]["items"][0] == {
+            "new_value": "New meta", "old_value": "Old meta", "cta": "Get a Quote",
+        }
+        assert by_id["h1_tag"]["items"][0] == {
+            "new_value": "New H1", "old_value": "Old H1", "primary_keyword": "auto insurance",
+        }
+        assert by_id["optimizations"]["items"][0] == {"note": "Added internal link to homepage."}
+        assert by_id["optimizations"]["category"] == "Optimizations"
+
+
+async def test_record_page_from_text_adds_the_page_automatically(mcp_app):
+    async with Client(mcp_app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+
+        await client.call_tool(
+            "record_page_from_text",
+            {"session_id": session_id, "text": "url: https://kyz.com/a/\ntitle: New Title"},
+        )
+
+        state = await client.call_tool("get_session", {"session_id": session_id})
+        assert len(state.data["pages"]) == 1
+        assert state.data["pages"][0]["url"] == "https://kyz.com/a/"
+
+
+async def test_record_page_from_text_surfaces_validation_failure(mcp_app):
+    async with Client(mcp_app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+
+        # meta given with no cta — validate_touchpoint requires one.
+        result = await client.call_tool(
+            "record_page_from_text",
+            {"session_id": session_id, "text": "url: https://kyz.com/a/\nmeta: New meta only, no CTA"},
+        )
+
+        meta = next(tp for tp in result.data["touchpoints"] if tp["touchpoint_id"] == "meta_description")
+        assert meta["validation"]["passed"] is False
+        assert any("cta" in m for m in meta["validation"]["messages"])
+
+
+async def test_record_page_from_text_only_touches_fields_present_on_recall(mcp_app):
+    async with Client(mcp_app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+
+        await client.call_tool(
+            "record_page_from_text",
+            {
+                "session_id": session_id,
+                "text": "url: https://kyz.com/a/\ntitle: New Title\nkeyword: widgets\nh1: New H1",
+            },
+        )
+        # A follow-up correction only naming title shouldn't wipe out h1.
+        result = await client.call_tool(
+            "record_page_from_text",
+            {"session_id": session_id, "text": "url: https://kyz.com/a/\ntitle: Corrected Title"},
+        )
+
+        by_id = {tp["touchpoint_id"]: tp for tp in result.data["touchpoints"]}
+        assert by_id["title_tag"]["items"][0]["new_value"] == "Corrected Title"
+        assert by_id["h1_tag"]["items"][0]["new_value"] == "New H1"
+
+
+async def test_record_page_from_text_keyword_autofills_primary_keyword(mcp_app):
+    async with Client(mcp_app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+
+        result = await client.call_tool(
+            "record_page_from_text",
+            {
+                "session_id": session_id,
+                "text": "url: https://kyz.com/a/\nkeyword: back pain\ntitle: New Title\nh1: New H1",
+            },
+        )
+
+        by_id = {tp["touchpoint_id"]: tp for tp in result.data["touchpoints"]}
+        assert by_id["title_tag"]["items"][0]["primary_keyword"] == "back pain"
+        assert by_id["h1_tag"]["items"][0]["primary_keyword"] == "back pain"
+
+
+async def test_record_page_from_text_missing_url_raises(mcp_app):
+    async with Client(mcp_app) as client:
+        session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
+        session_id = session.data["session_id"]
+        with pytest.raises(ToolError, match="Missing \"url:\" line"):
+            await client.call_tool(
+                "record_page_from_text", {"session_id": session_id, "text": "title: New Title Only"}
+            )
+
+
 async def test_list_open_questions_reflects_progress(mcp_app):
     async with Client(mcp_app) as client:
         session = await client.call_tool("start_session", {"client": "KYZ", "month": "2026-06"})
