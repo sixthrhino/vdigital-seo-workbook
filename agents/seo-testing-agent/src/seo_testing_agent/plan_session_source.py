@@ -154,6 +154,23 @@ def page_to_row(page: dict) -> dict[str, Any]:
     for link_touchpoint_id in ("internal_linking_to_other_pages_homepage", "internal_linking_to_target_page"):
         if link_touchpoint_id in touchpoints:
             opt_note_parts.append(_internal_link_opt_note(touchpoints[link_touchpoint_id].get("items") or []))
+    if "optimizations" in touchpoints:
+        # Free-text note (a legacy import, or record_page_from_text's own
+        # notes: field) — unlike the structured touchpoints above, there's
+        # no touchpoint_id here to map to a testing-catalog auto_check via
+        # page_optimization_names. Folded into opt_note anyway:
+        # checks_for_row's own _extract_inline_headings/_extract_internal_links
+        # already parse "<H#> text"/"internal link to <url>" mentions out of
+        # free text (built for exactly this, from the old Sheets opt_note
+        # column) and dispatch the matching check unconditionally when
+        # found — so headings/links actually named in the note still get
+        # verified against the live site, even though anything else
+        # mentioned there (e.g. "added schema markup") isn't checkable
+        # without a structured touchpoint to hang a check off of.
+        for item in touchpoints["optimizations"].get("items") or []:
+            note = item.get("note", "")
+            if note:
+                opt_note_parts.append(note)
 
     redirect_item = _first_item(touchpoints, "url_changes_redirection")
 

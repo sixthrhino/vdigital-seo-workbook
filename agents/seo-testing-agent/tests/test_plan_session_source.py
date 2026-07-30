@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import seo_testing_agent.check_orchestrator as check_orchestrator
 import seo_testing_agent.plan_session_source as pss
 
 
@@ -133,6 +134,49 @@ class TestPageToRow:
         ]}
         row = pss.page_to_row(page)
         assert "Internal link to https://example.com/faqs/" in row["opt_note"]
+
+    def test_optimizations_touchpoint_note_is_folded_into_opt_note(self):
+        # The free-text "optimizations" touchpoint (legacy import, or
+        # record_page_from_text's notes: field) has no touchpoint_id to
+        # dispatch a check from directly — but checks_for_row's own
+        # heading/link extraction already parses this exact free-text
+        # shape, so folding it into opt_note is enough to make those
+        # checks fire without any new dispatch logic.
+        page = {"url": "https://example.com/a", "touchpoints": [
+            {"touchpoint_id": "optimizations", "items": [
+                {"note": "Make Headers below an <H2> tag\n<H3> Checking Over Your Trailer\n<H3> Emergency Equipment"},
+            ]},
+        ]}
+        row = pss.page_to_row(page)
+        assert "<H3> Checking Over Your Trailer" in row["opt_note"]
+        assert "<H3> Emergency Equipment" in row["opt_note"]
+
+    def test_optimizations_touchpoint_headings_dispatch_seo_check_headings(self):
+        page = {"url": "https://example.com/a", "touchpoints": [
+            {"touchpoint_id": "optimizations", "items": [
+                {"note": "<H3> Checking Over Your Trailer\n<H3> Emergency Equipment"},
+            ]},
+        ]}
+        row = pss.page_to_row(page)
+        calls = check_orchestrator.checks_for_row(row, [])
+        heading_calls = [kw for name, kw in calls if name == "seo_check_headings"]
+        assert len(heading_calls) == 1
+        assert heading_calls[0]["expected_headings"] == (
+            "<H3> Checking Over Your Trailer\n<H3> Emergency Equipment"
+        )
+
+    def test_optimizations_touchpoint_internal_links_dispatch_expected_links_check(self):
+        page = {"url": "https://example.com/a", "touchpoints": [
+            {"touchpoint_id": "optimizations", "items": [
+                {"note": "Internal link here to https://example.com/faqs/"},
+            ]},
+        ]}
+        row = pss.page_to_row(page)
+        calls = check_orchestrator.checks_for_row(row, [])
+        assert ("elements_check_expected_links", {
+            "url": "https://example.com/a",
+            "expected_links": ["https://example.com/faqs/"],
+        }) in calls
 
     def test_url_changes_redirection_populates_redirection_from_old_value(self):
         page = {"url": "https://example.com/new", "touchpoints": [
