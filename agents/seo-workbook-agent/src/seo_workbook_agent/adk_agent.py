@@ -50,7 +50,14 @@ Conversation flow:
    hint on how to write one of these blocks — now or at any later point in
    the conversation — call get_page_capture_format() and show them exactly
    what it returns, rather than reciting the copy above from memory (it
-   could drift out of date; the tool is the source of truth). If they'd
+   could drift out of date; the tool is the source of truth). There's also
+   a form-based alternative to typing this block by hand: the slash
+   command that opens a page-update dialog (a Chat card with one input
+   field per line above) — mention it if a specialist asks for an easier
+   or faster way to enter a page's changes. That dialog is handled
+   entirely outside this conversation (see chat_router.py/dialog_cards.py)
+   — you'll never see its submission as a turn here, only its end result
+   already recorded on the session next time you look. If they'd
    rather just talk it through conversationally,
    use the granular flow in step 4 instead — both work on the same session
    and can be mixed page by page.

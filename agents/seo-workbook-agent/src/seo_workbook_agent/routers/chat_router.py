@@ -10,6 +10,8 @@ from ..chat_auth import ChatAuthError, verify_chat_bearer_token
 from ..chat_client import post_chat_message
 from ..chat_formatting import extract_message, to_chat_markup
 from ..config import get_agent_settings
+from ..dialog_cards import build_page_update_dialog, extract_form_inputs, is_dialog_submission, is_slash_command
+from ..dialog_submission import handle_dialog_submission
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -60,6 +62,20 @@ async def chat(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     event = await request.json()
+
+    # A page-update dialog is a self-contained request/response exchange —
+    # Chat expects the dialog card (or, on submission, the resulting
+    # status) directly in *this* HTTP response, unlike a normal message
+    # turn (see _process_and_reply above), which replies asynchronously
+    # because a multi-tool-call agent turn can run long. Both branches
+    # below are awaited here rather than backgrounded for that reason.
+    if is_slash_command(event):
+        return build_page_update_dialog()
+
+    if is_dialog_submission(event):
+        values = extract_form_inputs(event)
+        return await handle_dialog_submission(values, mcp_server_url=settings.mcp_server_url)
+
     parsed = extract_message(event)
     if parsed is None:
         return {}

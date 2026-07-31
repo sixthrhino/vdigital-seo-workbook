@@ -208,6 +208,57 @@ def test_chat_added_to_space_runs_a_real_turn_and_posts_the_agents_own_greeting(
     assert call["body"]["text"] == stub.reply
 
 
+def test_chat_returns_the_page_update_dialog_for_the_slash_command(monkeypatch):
+    client, stub, fake_chat_service = _client(monkeypatch)
+    with patch(VERIFY_PATH):
+        response = client.post(
+            "/chat",
+            headers={"Authorization": "Bearer faketoken"},
+            json={
+                "type": "MESSAGE",
+                "message": {"slashCommand": {"commandId": "1"}, "text": "/update-page"},
+                "space": {"name": "spaces/AAAA"},
+                "user": {"name": "users/123"},
+            },
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["actionResponse"]["type"] == "DIALOG"
+    # A slash command is answered synchronously with the dialog itself —
+    # never routed through the conversational agent or the async chat post.
+    assert stub.calls == []
+    assert fake_chat_service.spaces_resource.messages_resource.create_calls == []
+
+
+def test_chat_routes_dialog_submission_to_handle_dialog_submission(monkeypatch):
+    client, stub, fake_chat_service = _client(monkeypatch)
+
+    async def fake_handler(values, *, mcp_server_url):
+        fake_handler.received = values
+        return {"actionResponse": {"dialogAction": {"actionStatus": {"statusCode": "OK", "userFacingMessage": "ok"}}}}
+
+    with patch(VERIFY_PATH), patch(
+        "seo_workbook_agent.routers.chat_router.handle_dialog_submission", side_effect=fake_handler
+    ):
+        response = client.post(
+            "/chat",
+            headers={"Authorization": "Bearer faketoken"},
+            json={
+                "type": "CARD_CLICKED",
+                "dialogEventType": "SUBMIT_DIALOG",
+                "common": {"formInputs": {"client": {"stringInputs": {"value": ["KYZ"]}}}},
+                "space": {"name": "spaces/AAAA"},
+                "user": {"name": "users/123"},
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["actionResponse"]["dialogAction"]["actionStatus"]["userFacingMessage"] == "ok"
+    assert fake_handler.received == {"client": "KYZ"}
+    # Same as the slash command: no conversational agent turn, no async post.
+    assert stub.calls == []
+    assert fake_chat_service.spaces_resource.messages_resource.create_calls == []
+
+
 def test_chat_ignores_blank_message_text(monkeypatch):
     client, stub, fake_chat_service = _client(monkeypatch)
     with patch(VERIFY_PATH):
