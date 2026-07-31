@@ -126,6 +126,26 @@ class TestPageToRow:
         assert "<H3> Common Career Paths" in row["opt_note"]
         assert "<H3> How to use your GI benefits" in row["opt_note"]
 
+    def test_heading_touchpoint_populates_old_headings_index_aligned_with_opt_note(self):
+        page = {"url": "https://example.com/a", "touchpoints": [
+            {"touchpoint_id": "h2_h3_h4_tags", "items": [
+                {"old_tag": "h2", "new_tag": "h3", "heading_text": "Checking Over Your Trailer"},
+                {"new_tag": "h3", "heading_text": "Emergency Equipment"},
+            ]},
+        ]}
+        row = pss.page_to_row(page)
+        # Item 2 has no old_tag — falls back to its own new_tag as a no-op
+        # placeholder rather than leaving a gap that would misalign the
+        # index-based pairing check_heading_hierarchy relies on.
+        assert row["old_headings"] == (
+            "<H2> Checking Over Your Trailer\n<H3> Emergency Equipment"
+        )
+
+    def test_no_heading_touchpoint_leaves_old_headings_empty(self):
+        page = {"url": "https://example.com/a", "touchpoints": []}
+        row = pss.page_to_row(page)
+        assert row["old_headings"] == ""
+
     def test_internal_linking_touchpoint_produces_internal_link_opt_note(self):
         page = {"url": "https://example.com/a", "touchpoints": [
             {"touchpoint_id": "internal_linking_to_target_page", "items": [
@@ -163,6 +183,28 @@ class TestPageToRow:
         assert len(heading_calls) == 1
         assert heading_calls[0]["expected_headings"] == (
             "<H3> Checking Over Your Trailer\n<H3> Emergency Equipment"
+        )
+        # No h2_h3_h4_tags touchpoint here (free text only) — nothing
+        # populates old_headings, so it's correctly left out entirely
+        # rather than passed through empty.
+        assert "old_headings" not in heading_calls[0]
+
+    def test_heading_touchpoint_dispatches_seo_check_headings_with_old_headings(self):
+        page = {"url": "https://example.com/a", "touchpoints": [
+            {"touchpoint_id": "h2_h3_h4_tags", "items": [
+                {"old_tag": "h2", "new_tag": "h3", "heading_text": "Checking Over Your Trailer"},
+                {"new_tag": "h3", "heading_text": "Emergency Equipment"},
+            ]},
+        ]}
+        row = pss.page_to_row(page)
+        calls = check_orchestrator.checks_for_row(row, [])
+        heading_calls = [kw for name, kw in calls if name == "seo_check_headings"]
+        assert len(heading_calls) == 1
+        assert heading_calls[0]["expected_headings"] == (
+            "<H3> Checking Over Your Trailer\n<H3> Emergency Equipment"
+        )
+        assert heading_calls[0]["old_headings"] == (
+            "<H2> Checking Over Your Trailer\n<H3> Emergency Equipment"
         )
 
     def test_optimizations_touchpoint_internal_links_dispatch_expected_links_check(self):

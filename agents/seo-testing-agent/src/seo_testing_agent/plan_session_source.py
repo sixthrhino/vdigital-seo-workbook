@@ -108,6 +108,32 @@ def _heading_opt_note(items: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
+def _heading_old_opt_note(items: list[dict[str, str]]) -> str:
+    """Reconstruct one "<H#> heading text" line per item, at its *old*
+    level instead of the new one — index-aligned with _heading_opt_note's
+    output (same items, same skip condition) so seo_check_headings can pair
+    them up positionally (see check_heading_hierarchy's old_headings param)
+    and tell a "not changed yet — old heading still live" failure apart
+    from a generic "not found".
+
+    The copy itself never changes here, only the wrapping tag, so an
+    item's own heading_text is reused for its old line too. Items with no
+    old_tag (level genuinely not stated in the source) fall back to their
+    own new_tag instead of an old one — a harmless no-op for that index:
+    it can only "match" the live page at the same text+level the primary
+    expected_headings check already passes on, never producing a false
+    "old heading still live" positive.
+    """
+    lines = []
+    for item in items:
+        new_tag = (item.get("new_tag") or "").upper()
+        old_tag = (item.get("old_tag") or item.get("new_tag") or "").upper()
+        text = item.get("heading_text") or ""
+        if new_tag and text:
+            lines.append(f"<{old_tag}> {text}")
+    return "\n".join(lines)
+
+
 def _internal_link_opt_note(items: list[dict[str, str]]) -> str:
     """Reconstruct "Internal link to <URL>" lines from structured
     internal-linking items (anchor_text/target_url — see validators.py) —
@@ -142,15 +168,23 @@ def page_to_row(page: dict) -> dict[str, Any]:
     guided_questions) with reconstructed heading/internal-link mini-blocks
     (so checks_for_row's own inline-heading/internal-link extraction keeps
     working unchanged) — everything downstream of this function is
-    unmodified Mode B pipeline.
+    unmodified Mode B pipeline. row["old_headings"] is the one addition
+    checks_for_row does know about directly: h2_h3_h4_tags items' old
+    levels, index-aligned with the "<H#> text" lines opt_note contributes
+    for that same touchpoint, so a failed heading check can say the old
+    heading is still live instead of just "not found" (see
+    _heading_old_opt_note). Empty when there's no h2_h3_h4_tags touchpoint.
     """
     touchpoints = _touchpoints_by_id(page)
     keyword_target = page.get("keyword_target") or {}
     geo_city, geo_state = _split_geo(page.get("geo") or "")
 
     opt_note_parts = [page_optimization_names(page)]
+    old_headings = ""
     if "h2_h3_h4_tags" in touchpoints:
-        opt_note_parts.append(_heading_opt_note(touchpoints["h2_h3_h4_tags"].get("items") or []))
+        heading_items = touchpoints["h2_h3_h4_tags"].get("items") or []
+        opt_note_parts.append(_heading_opt_note(heading_items))
+        old_headings = _heading_old_opt_note(heading_items)
     for link_touchpoint_id in ("internal_linking_to_other_pages_homepage", "internal_linking_to_target_page"):
         if link_touchpoint_id in touchpoints:
             opt_note_parts.append(_internal_link_opt_note(touchpoints[link_touchpoint_id].get("items") or []))
@@ -184,6 +218,7 @@ def page_to_row(page: dict) -> dict[str, Any]:
         "new_h1": _first_item(touchpoints, "h1_tag").get("new_value", ""),
         "redirection": redirect_item.get("old_value") or redirect_item.get("old_url", ""),
         "opt_note": "\n\n".join(part for part in opt_note_parts if part),
+        "old_headings": old_headings,
     }
 
 

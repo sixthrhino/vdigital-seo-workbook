@@ -222,6 +222,31 @@ class TestChecksForRow:
         calls = co.checks_for_row(row, ["seo_check_headings"])
         assert ("seo_check_headings", {"url": "https://example.com/a"}) in calls
 
+    def test_old_headings_row_field_passed_through_to_seo_check_headings(self):
+        row = {
+            "url": "https://example.com/a",
+            "opt_note": "<H3> Checking Over Your Trailer",
+            "old_headings": "<H2> Checking Over Your Trailer",
+        }
+        calls = co.checks_for_row(row, [])
+        kwargs = next(kw for name, kw in calls if name == "seo_check_headings")
+        assert kwargs["old_headings"] == "<H2> Checking Over Your Trailer"
+
+    def test_blank_old_headings_row_field_is_omitted_not_passed_empty(self):
+        row = {"url": "https://example.com/a", "opt_note": "<H3> Checking Over Your Trailer", "old_headings": ""}
+        calls = co.checks_for_row(row, [])
+        kwargs = next(kw for name, kw in calls if name == "seo_check_headings")
+        assert "old_headings" not in kwargs
+
+    def test_missing_old_headings_row_field_is_omitted(self):
+        # Rows from any source that doesn't populate old_headings at all
+        # (legacy free-text opt_note headings, or a row dict built before
+        # this field existed) shouldn't break — just no old-heading diagnostic.
+        row = {"url": "https://example.com/a", "opt_note": "<H3> Checking Over Your Trailer"}
+        calls = co.checks_for_row(row, [])
+        kwargs = next(kw for name, kw in calls if name == "seo_check_headings")
+        assert "old_headings" not in kwargs
+
     def test_internal_link_mentions_dispatch_expected_links_check(self):
         row = {"url": "https://example.com/a", "opt_note": (
             "Internal link here to https://iecrm.org/faqs/\n\n"

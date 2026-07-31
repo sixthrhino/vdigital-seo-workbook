@@ -189,7 +189,18 @@ def checks_for_row(row: dict, auto_checks: list[str], brand_guide: dict | None =
     inline_headings = _extract_inline_headings(opt_note)
     if inline_headings:
         calls = [(n, kw) for n, kw in calls if n != "seo_check_headings"]
-        calls.append(("seo_check_headings", {"url": row["url"], "expected_headings": inline_headings}))
+        headings_kwargs = {"url": row["url"], "expected_headings": inline_headings}
+        # Only meaningful when index-aligned with inline_headings — see
+        # plan_session_source._heading_old_opt_note, the one thing that
+        # currently populates this row field. A length mismatch (e.g. some
+        # of inline_headings came from a legacy free-text note this field
+        # doesn't cover) makes check_heading_hierarchy ignore old_headings
+        # entirely rather than mispair them, so passing it through even
+        # then is safe.
+        old_headings = str(row.get("old_headings", "")).strip()
+        if old_headings:
+            headings_kwargs["old_headings"] = old_headings
+        calls.append(("seo_check_headings", headings_kwargs))
 
     # "Internal link (here) to <URL>" mentions in the opt_note are a
     # concrete, checkable claim — verify each one is actually linked from
