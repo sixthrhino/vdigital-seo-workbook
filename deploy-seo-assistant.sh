@@ -8,11 +8,13 @@
 # deployments can stay up too, e.g. for direct testing, or be retired later
 # — this script doesn't touch them).
 #
-# Cross-project note: this service calls seo-workbook-mcp (vdigital-services-seo)
-# and seo-testing-mcp (vdigital-500922) directly — setup_project() below only
-# handles this project's own grants; the two `add-iam-policy-binding` calls
-# for the *other* projects' MCP servers need running once, by someone with
-# access to those projects (see the printed commands at the end of setup).
+# Cross-project note: both MCP servers this service calls now live in this
+# same consolidated project (vdigital-seo-assistant) by default — override
+# WORKBOOK_MCP_PROJECT/TESTING_MCP_PROJECT below if either one is ever moved
+# back out to its own project. setup_project() only handles *this* project's
+# own grants; if the MCP servers ever do live elsewhere again, the two
+# `add-iam-policy-binding` calls for those projects need running once, by
+# someone with access to them (see the printed commands at the end of setup).
 #
 # Report links: unchanged and untouched by this script — render_session_report
 # still builds links against seo-workbook-mcp's existing SEO_WORKBOOK_AGENT_PUBLIC_URL
@@ -38,9 +40,9 @@ AGENT_MODEL="${AGENT_MODEL:-gemini-2.5-flash}"
 
 # The two existing MCP servers this orchestrator calls — override if their
 # projects/regions/service names ever change.
-WORKBOOK_MCP_PROJECT="${WORKBOOK_MCP_PROJECT:-vdigital-services-seo}"
+WORKBOOK_MCP_PROJECT="${WORKBOOK_MCP_PROJECT:-vdigital-seo-assistant}"
 WORKBOOK_MCP_SERVICE="${WORKBOOK_MCP_SERVICE:-seo-workbook-mcp-server}"
-TESTING_MCP_PROJECT="${TESTING_MCP_PROJECT:-vdigital-500922}"
+TESTING_MCP_PROJECT="${TESTING_MCP_PROJECT:-vdigital-seo-assistant}"
 TESTING_MCP_SERVICE="${TESTING_MCP_SERVICE:-seo-testing-mcp}"
 
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/seo-assistant"
