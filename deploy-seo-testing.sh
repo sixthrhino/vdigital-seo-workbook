@@ -40,8 +40,9 @@ TARGET="${1:-both}"
 # the project's default compute service account. That one identity needs
 # Vertex AI access (for the agent's Gemini calls), Cloud Run Invoker on
 # seo-testing-mcp (so the agent's ID-token-authenticated MCP calls are
-# accepted), and (self-granted) Service Account Token Creator so
-# generate_report can sign report URLs without key material.
+# accepted), Secret Manager access (for MONGO_URI), and (self-granted)
+# Service Account Token Creator so seo-testing-agent's /reports/{token}
+# route can sign report URLs without key material.
 _project_number() {
   gcloud projects describe "${PROJECT}" --format="value(projectNumber)"
 }
@@ -65,6 +66,19 @@ deploy_mcp() {
     --config=mcp-servers/seo-testing-mcp/cloudbuild.yaml \
     --substitutions="_IMAGE=${MCP_IMAGE}" \
     --project "${PROJECT}"
+
+  # generate_report returns a short seo-testing-agent /reports/{token} link
+  # instead of a raw signed GCS URL — that URL is ~700 characters and a real
+  # source of corruption when an LLM has to relay it verbatim in a chat
+  # reply (confirmed live: one came back 15 hex characters short, breaking
+  # its signature). Needs Mongo (to store the token -> bucket/blob mapping)
+  # and the agent's own public URL (to build the link); same fix
+  # seo-workbook already applies to its own report links. Empty until
+  # seo-testing-agent has been deployed at least once — re-run this after
+  # deploy_agent on a brand-new project.
+  EXISTING_AGENT_URL=$(gcloud run services describe seo-testing-agent \
+    --region "${REGION}" --project "${PROJECT}" \
+    --format "value(status.url)" 2>/dev/null || true)
 
   echo "==> Deploying seo-testing-mcp to Cloud Run..."
   # content_check_grammar calls Gemini directly (the only non-deterministic
@@ -91,7 +105,8 @@ deploy_mcp() {
     --project "${PROJECT}" \
     --no-allow-unauthenticated \
     --session-affinity \
-    --set-env-vars "GCS_REPORT_BUCKET=${REPORTS_BUCKET},GEMINI_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},CITIES_GCS_URI=gs://${REPORTS_BUCKET}/qa-data/uscities.json,SITE_DICTIONARIES_GCS_URI=gs://${REPORTS_BUCKET}/qa-data/site_dictionaries.json" \
+    --set-env-vars "GCS_REPORT_BUCKET=${REPORTS_BUCKET},AGENT_PUBLIC_URL=${EXISTING_AGENT_URL},GEMINI_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},CITIES_GCS_URI=gs://${REPORTS_BUCKET}/qa-data/uscities.json,SITE_DICTIONARIES_GCS_URI=gs://${REPORTS_BUCKET}/qa-data/site_dictionaries.json" \
+    --set-secrets "MONGO_URI=seo-workbook-mongo-uri:latest" \
     --memory 512Mi \
     --timeout 300
 
@@ -99,6 +114,11 @@ deploy_mcp() {
     --region "${REGION}" --project "${PROJECT}" \
     --format "value(status.url)")
   echo "==> MCP server: ${MCP_URL}"
+
+  if [ -z "${EXISTING_AGENT_URL}" ]; then
+    echo "==> seo-testing-agent doesn't exist yet, so AGENT_PUBLIC_URL was empty this run."
+    echo "    Re-run './deploy-seo-testing.sh mcp' once seo-testing-agent has been deployed."
+  fi
 
   echo "==> Granting the (shared default compute) service account permission to invoke seo-testing-mcp..."
   gcloud run services add-iam-policy-binding seo-testing-mcp \
@@ -162,6 +182,7 @@ deploy_agent() {
     --allow-unauthenticated \
     --no-cpu-throttling \
     --set-env-vars "ENVIRONMENT=production,MCP_SERVER_URL=${MCP_URL},WORKBOOK_MCP_URL=${WORKBOOK_MCP_URL},GCP_PROJECT_ID=${PROJECT},GCP_LOCATION=${REGION},AGENT_MODEL=${AGENT_MODEL},GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${PROJECT},GOOGLE_CLOUD_LOCATION=${REGION},RUN_API_KEY=${RUN_API_KEY},CHAT_AUDIENCE=${CHAT_AUDIENCE}" \
+    --set-secrets "MONGO_URI=seo-workbook-mongo-uri:latest" \
     --memory 1Gi \
     --timeout 3600 \
     --concurrency 10
@@ -191,6 +212,7 @@ setup_project() {
     aiplatform.googleapis.com \
     artifactregistry.googleapis.com \
     storage.googleapis.com \
+    secretmanager.googleapis.com \
     --project "${PROJECT}"
 
   local sa
@@ -202,7 +224,14 @@ setup_project() {
     --condition=None \
     --quiet
 
-  echo "==> Granting ${sa} permission to sign its own tokens (needed for generate_report's signed URLs)..."
+  echo "==> Granting ${sa} access to read Secret Manager secrets (MONGO_URI, for report share-link tokens)..."
+  gcloud projects add-iam-policy-binding "${PROJECT}" \
+    --member="serviceAccount:${sa}" \
+    --role="roles/secretmanager.secretAccessor" \
+    --condition=None \
+    --quiet
+
+  echo "==> Granting ${sa} permission to sign its own tokens (needed for /reports/{token}'s signed URLs)..."
   gcloud iam service-accounts add-iam-policy-binding "${sa}" \
     --project "${PROJECT}" \
     --member="serviceAccount:${sa}" \

@@ -15,6 +15,7 @@ dependencies = [
     "gspread>=6.0.0",
     "google-auth>=2.29.0",
     "google-genai>=2.8.0",
+    "pymongo>=4.6.0",
     # Not in the original requirements.txt but actually imported by app.py
     # (load_dotenv) — was only working there as an unlisted transitive
     # dependency of something else; listed explicitly here instead.

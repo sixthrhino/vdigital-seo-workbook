@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     # can't reach a local webhook anyway.
     chat_audience: str = ""
 
+    # Mongo connection used solely to resolve /reports/{token} share links
+    # minted by seo-testing-mcp's generate_report — see report_tokens.py.
+    # Reuses the same MongoDB cluster/URI seo-workbook already has a secret
+    # for (a different database), rather than provisioning a new one.
+    mongo_uri: str = ""
+    mongo_database: str = "seo_testing"
+    mongo_report_tokens_collection: str = "report_tokens"
+
 
 settings = Settings()
 

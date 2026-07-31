@@ -8,7 +8,7 @@ from typing import AsyncIterator
 import httpx
 import uvicorn
 from fastapi import FastAPI, BackgroundTasks, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, HttpUrl
 
 import google.auth
@@ -21,6 +21,8 @@ from google.genai import types as genai_types
 
 from .agent import create_agent
 from .config import settings
+from .gcs_signing import build_mongo_collection, build_storage_client, generate_report_url, iam_signing_credentials
+from .report_tokens import lookup_report_token
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,6 +76,58 @@ app = FastAPI(title="Web Content Reviewer Agent", lifespan=lifespan)
 @app.get("/health")
 async def health():
     return {"status": "ok", "environment": settings.environment}
+
+
+# ---------------------------------------------------------------------------
+# Report share-link redirect
+# ---------------------------------------------------------------------------
+
+# Module-level, monkeypatchable factories (matching this file's existing
+# style — see FakeRunner/_post_to_chat patching in tests) rather than a
+# create_app(...)-injected app.state, since this file doesn't use that
+# pattern anywhere else. Each is only called lazily inside get_report, not
+# at import time, so importing this module never triggers credential
+# resolution.
+_storage_client_factory = build_storage_client
+_signing_credentials_factory = iam_signing_credentials
+_report_tokens_collection_factory = lambda: build_mongo_collection(
+    settings.mongo_uri, settings.mongo_database, settings.mongo_report_tokens_collection
+)
+
+
+@app.get("/reports/{token}")
+def get_report(token: str):
+    """Resolve a short report share-token (minted by seo-testing-mcp's
+    generate_report) into a freshly-signed GCS URL and redirect there.
+
+    Exists because the alternative — an LLM reproducing a ~700-char signed
+    URL verbatim in a chat reply — is a real source of corruption
+    (confirmed live: a relayed signed URL came back 15 hex characters
+    short, breaking its signature). The short link is what actually goes
+    in front of the model instead; this route does the signing, fresh,
+    at click time.
+
+    A plain (non-async) route — FastAPI runs it in a worker thread, so the
+    blocking Mongo/GCS calls here don't block the event loop.
+    """
+    if not settings.mongo_uri:
+        raise HTTPException(status_code=503, detail="Report storage is not configured")
+
+    tokens_collection = _report_tokens_collection_factory()
+    record = lookup_report_token(tokens_collection, token)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Report link not found or expired")
+
+    storage_client = _storage_client_factory()
+    service_account_email, access_token = _signing_credentials_factory()
+    url = generate_report_url(
+        storage_client,
+        record["bucket_name"],
+        record["blob_name"],
+        service_account_email=service_account_email,
+        access_token=access_token,
+    )
+    return RedirectResponse(url=url, status_code=302)
 
 
 @app.post("/run", response_model=ReviewResponse)

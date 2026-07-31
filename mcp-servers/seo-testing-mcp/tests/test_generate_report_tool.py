@@ -10,8 +10,6 @@ two live bugs fixed here:
      and switching to a signed URL instead of a public bucket ACL.
 """
 
-from datetime import timedelta
-
 import pytest
 
 from seo_testing_mcp.app import generate_report
@@ -72,33 +70,40 @@ class _FakeClient:
         return self._bucket
 
 
-class _FakeBaseCredentials:
-    service_account_email = "test-sa@example.iam.gserviceaccount.com"
+class _FakeReportTokensCollection:
+    def __init__(self):
+        self.documents = {}
 
-    def refresh(self, request):
-        pass
-
-
-class _FakeSigningCredentials:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
+    def insert_one(self, document):
+        self.documents[document["_id"]] = document
 
 
 class TestGenerateReportGCS:
     @pytest.fixture(autouse=True)
-    def fake_signing(self, monkeypatch):
-        # generate_signed_url needs credentials that can sign, which Cloud
-        # Run's default metadata-server credentials can't do locally — the
-        # real code wraps them in self-impersonated credentials to route
-        # signing through the IAM API instead. Stub both layers so tests
-        # don't need real GCP credentials.
-        monkeypatch.setattr("google.auth.default", lambda: (_FakeBaseCredentials(), "test-project"))
-        monkeypatch.setattr(
-            "google.auth.impersonated_credentials.Credentials",
-            lambda **kwargs: _FakeSigningCredentials(**kwargs),
-        )
+    def fake_mongo(self, monkeypatch):
+        # generate_report now stores a token in Mongo and returns a short
+        # /reports/{token} link (seo-testing-agent) instead of signing a
+        # URL itself — see report_tokens.py and the module docstring on why
+        # (a raw signed URL is a real source of corruption when an LLM has
+        # to relay it verbatim; confirmed live).
+        self.tokens_collection = _FakeReportTokensCollection()
 
-    def test_uploads_with_unique_name_and_returns_signed_url(self, monkeypatch):
+        class _FakeDb:
+            def __getitem__(_self, collection_name):
+                return self.tokens_collection
+
+        class _FakeMongoClient:
+            def __init__(_self, uri):
+                _self.uri = uri
+
+            def __getitem__(_self, database):
+                return _FakeDb()
+
+        monkeypatch.setattr("pymongo.MongoClient", _FakeMongoClient)
+        monkeypatch.setenv("MONGO_URI", "mongodb://fake-uri")
+        monkeypatch.setenv("AGENT_PUBLIC_URL", "https://seo-testing-agent.example.com")
+
+    def test_uploads_with_unique_name_and_returns_a_short_report_link(self, monkeypatch):
         monkeypatch.setenv("GCS_REPORT_BUCKET", "vdigital-500922-qa-reports")
         bucket = _FakeBucket()
         monkeypatch.setattr("google.cloud.storage.Client", lambda: _FakeClient(bucket))
@@ -111,23 +116,23 @@ class TestGenerateReportGCS:
         assert blob_name.endswith(".html")
         assert blob.uploaded[1] == "text/html"
         assert blob.make_public_called is False
-        assert result == f"https://storage.googleapis.com/signed/{id(blob)}"
-        assert blob.signed_url_kwargs["version"] == "v4"
-        assert blob.signed_url_kwargs["method"] == "GET"
-        assert blob.signed_url_kwargs["expiration"] == timedelta(days=7)
-        assert isinstance(blob.signed_url_kwargs["credentials"], _FakeSigningCredentials)
-        assert blob.signed_url_kwargs["credentials"].kwargs["target_principal"] == \
-            "test-sa@example.iam.gserviceaccount.com"
 
-    def test_two_reports_get_distinct_object_names(self, monkeypatch):
+        assert result.startswith("https://seo-testing-agent.example.com/reports/")
+        token = result.rsplit("/", 1)[-1]
+        stored = self.tokens_collection.documents[token]
+        assert stored["bucket_name"] == "vdigital-500922-qa-reports"
+        assert stored["blob_name"] == blob_name
+
+    def test_two_reports_get_distinct_object_names_and_tokens(self, monkeypatch):
         monkeypatch.setenv("GCS_REPORT_BUCKET", "vdigital-500922-qa-reports")
         bucket = _FakeBucket()
         monkeypatch.setattr("google.cloud.storage.Client", lambda: _FakeClient(bucket))
 
-        generate_report(RESULTS, output_path="/tmp/qa_result.html")
-        generate_report(RESULTS, output_path="/tmp/qa_result.html")
+        first = generate_report(RESULTS, output_path="/tmp/qa_result.html")
+        second = generate_report(RESULTS, output_path="/tmp/qa_result.html")
 
         assert len(bucket.blobs) == 2
+        assert first != second
 
     def test_missing_client_and_month_still_produce_a_valid_name(self, monkeypatch):
         monkeypatch.setenv("GCS_REPORT_BUCKET", "vdigital-500922-qa-reports")
@@ -138,3 +143,21 @@ class TestGenerateReportGCS:
 
         blob_name = next(iter(bucket.blobs))
         assert blob_name.startswith("qa-reports/report-")
+
+    def test_missing_mongo_uri_raises_clear_error(self, monkeypatch):
+        monkeypatch.setenv("GCS_REPORT_BUCKET", "vdigital-500922-qa-reports")
+        monkeypatch.delenv("MONGO_URI", raising=False)
+        bucket = _FakeBucket()
+        monkeypatch.setattr("google.cloud.storage.Client", lambda: _FakeClient(bucket))
+
+        with pytest.raises(ValueError, match="MONGO_URI"):
+            generate_report(RESULTS, output_path="/tmp/qa_result.html")
+
+    def test_missing_agent_public_url_raises_clear_error(self, monkeypatch):
+        monkeypatch.setenv("GCS_REPORT_BUCKET", "vdigital-500922-qa-reports")
+        monkeypatch.delenv("AGENT_PUBLIC_URL", raising=False)
+        bucket = _FakeBucket()
+        monkeypatch.setattr("google.cloud.storage.Client", lambda: _FakeClient(bucket))
+
+        with pytest.raises(ValueError, match="AGENT_PUBLIC_URL"):
+            generate_report(RESULTS, output_path="/tmp/qa_result.html")

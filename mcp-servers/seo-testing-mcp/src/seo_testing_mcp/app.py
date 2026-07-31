@@ -48,6 +48,7 @@ from .tools.sheets import (
     read_brand_guide_tab, read_client_details,
 )
 from .tools.render_report import render as _render_html
+from .report_tokens import create_report_token
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -354,9 +355,21 @@ def generate_report(results: dict, output_path: str = "/tmp/qa_result.html") -> 
     When GCS_REPORT_BUCKET is set the report is uploaded to Cloud Storage
     under a unique object name (timestamp + client/month + a short random
     suffix, NOT output_path's filename — every report used to land at the
-    same object and silently overwrite the last one) and a time-limited (7
-    day) signed URL is returned. Otherwise the HTML is written to
-    output_path and that path is returned.
+    same object and silently overwrite the last one) and a short
+    /reports/{token} share link (seo-testing-agent) is returned. Otherwise
+    the HTML is written to output_path and that path is returned.
+
+    The link is short on purpose — NOT a raw ~700-character signed GCS URL.
+    Confirmed live: a signed URL relayed verbatim through Gemini's chat
+    reply came back missing 15 hex characters, breaking the signature
+    (SignatureDoesNotMatch on click) even though signing itself succeeded.
+    A short opaque token the model can reproduce reliably sidesteps that —
+    the token resolves to a freshly-signed URL server-side, at redirect
+    time, in seo-testing-agent's /reports/{token} route. Mirrors
+    seo-workbook's identical fix for the same problem (see
+    shared/seo_workbook_common/storage/report_tokens.py and
+    seo-workbook-agent/routers/reports_router.py) — duplicated rather than
+    imported, since this package deliberately has no shared/ dependency.
 
     Args:
         results: Dict with keys month, client, urls (list of per-URL result
@@ -368,12 +381,20 @@ def generate_report(results: dict, output_path: str = "/tmp/qa_result.html") -> 
         output_path: Local fallback path (default /tmp/qa_result.html).
 
     Returns:
-        A signed GCS URL (production) or the local file path (development).
+        A short report share link (production) or the local file path
+        (development).
     """
     html = _render_html(results)
 
     bucket_name = os.environ.get("GCS_REPORT_BUCKET")
     if bucket_name:
+        mongo_uri = os.environ.get("MONGO_URI")
+        agent_public_url = os.environ.get("AGENT_PUBLIC_URL")
+        if not mongo_uri:
+            raise ValueError("MONGO_URI is not configured — required to mint report share links")
+        if not agent_public_url:
+            raise ValueError("AGENT_PUBLIC_URL is not configured — required to mint report share links")
+
         from google.cloud import storage as gcs
         client = gcs.Client()
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -383,30 +404,12 @@ def generate_report(results: dict, output_path: str = "/tmp/qa_result.html") -> 
         blob = client.bucket(bucket_name).blob(blob_name)
         blob.upload_from_string(html, content_type="text/html")
 
-        # Signed URL, not a public bucket ACL — the bucket itself is private.
-        # Cloud Run's default credentials are just a metadata-server access
-        # token with no private key, so generate_signed_url can't sign
-        # locally ("you need a private key to sign credentials"). Wrapping
-        # them in self-impersonated credentials routes signing through the
-        # IAM Credentials API instead, which is what
-        # roles/iam.serviceAccountTokenCreator (granted on the SA to itself
-        # in deploy.sh) is for.
-        import google.auth
-        from google.auth import impersonated_credentials
-        from google.auth.transport import requests as google_auth_requests
-
-        base_credentials, _ = google.auth.default()
-        base_credentials.refresh(google_auth_requests.Request())
-        signing_credentials = impersonated_credentials.Credentials(
-            source_credentials=base_credentials,
-            target_principal=base_credentials.service_account_email,
-            target_scopes=[],
-            lifetime=3600,
-        )
-        return blob.generate_signed_url(
-            version="v4", expiration=timedelta(days=7), method="GET",
-            credentials=signing_credentials,
-        )
+        from pymongo import MongoClient
+        mongo_database = os.environ.get("MONGO_DATABASE", "seo_testing")
+        mongo_collection_name = os.environ.get("MONGO_REPORT_TOKENS_COLLECTION", "report_tokens")
+        tokens_collection = MongoClient(mongo_uri)[mongo_database][mongo_collection_name]
+        token = create_report_token(tokens_collection, bucket_name, blob_name)
+        return f"{agent_public_url.rstrip('/')}/reports/{token}"
 
     with open(output_path, "w") as f:
         f.write(html)
