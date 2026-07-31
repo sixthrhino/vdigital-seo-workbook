@@ -1,6 +1,7 @@
 from seo_workbook_agent.dialog_cards import (
     build_client_month_dialog,
     build_url_entry_dialog,
+    build_url_only_dialog,
     dialog_error,
     dialog_ok,
     extract_button_parameters,
@@ -23,29 +24,96 @@ def test_build_client_month_dialog_has_client_and_month_fields_and_a_next_button
     assert button_widgets[0]["buttonList"]["buttons"][0]["onClick"]["action"]["function"] == "startPageEntry"
 
 
-def test_build_url_entry_dialog_has_the_full_page_field_set():
-    dialog = build_url_entry_dialog("North Texas Trailers", "2026-07", count=1)
+def test_build_url_only_dialog_has_just_a_url_field_and_a_next_button():
+    dialog = build_url_only_dialog("KYZ", "2026-06", count=1)
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+
+    text_input_names = [w["textInput"]["name"] for w in widgets if "textInput" in w]
+    assert text_input_names == ["url"]
+
+    button_widgets = [w for w in widgets if "buttonList" in w]
+    assert len(button_widgets) == 1
+    button = button_widgets[0]["buttonList"]["buttons"][0]
+    assert button["onClick"]["action"]["function"] == "fetchPageAndContinue"
+    params = {p["key"]: p["value"] for p in button["onClick"]["action"]["parameters"]}
+    assert params == {"client": "KYZ", "month": "2026-06", "count": "1"}
+
+
+def test_build_url_only_dialog_header_confirms_the_last_saved_url():
+    dialog = build_url_only_dialog("KYZ", "2026-06", count=2, last_saved_url="https://kyz.com/a/")
+    header = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
+    assert header == "✓ Saved https://kyz.com/a/ — Page 2 for KYZ (2026-06)"
+
+
+def test_build_url_entry_dialog_has_the_full_page_field_set_minus_url_and_old_values():
+    dialog = build_url_entry_dialog("North Texas Trailers", "2026-07", "https://kyz.com/a/", count=1)
     widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
 
     text_input_names = [w["textInput"]["name"] for w in widgets if "textInput" in w]
     assert "client" not in text_input_names
     assert "month" not in text_input_names
-    assert "url" in text_input_names
+    assert "url" not in text_input_names
+    assert "title_old" not in text_input_names
+    assert "meta_old" not in text_input_names
+    assert "h1_old" not in text_input_names
+    assert "title_new" in text_input_names
     assert "headings" in text_input_names
     assert "notes" in text_input_names
 
 
+def test_build_url_entry_dialog_shows_the_url_being_edited():
+    dialog = build_url_entry_dialog("KYZ", "2026-06", "https://kyz.com/a/", count=1)
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+    assert widgets[0]["textParagraph"]["text"] == "Editing: https://kyz.com/a/"
+
+
 def test_build_url_entry_dialog_marks_headings_and_notes_multiline():
-    dialog = build_url_entry_dialog("KYZ", "2026-06", count=1)
+    dialog = build_url_entry_dialog("KYZ", "2026-06", "https://kyz.com/a/", count=1)
     widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
     by_name = {w["textInput"]["name"]: w["textInput"] for w in widgets if "textInput" in w}
     assert by_name["headings"]["type"] == "MULTIPLE_LINE"
     assert by_name["notes"]["type"] == "MULTIPLE_LINE"
-    assert "type" not in by_name["url"]
+    assert "type" not in by_name["title_new"]
 
 
-def test_build_url_entry_dialog_carries_client_month_count_as_button_parameters():
-    dialog = build_url_entry_dialog("KYZ", "2026-06", count=3)
+def test_build_url_entry_dialog_shows_fetched_current_values_as_hint_text():
+    dialog = build_url_entry_dialog(
+        "KYZ", "2026-06", "https://kyz.com/a/", count=1,
+        current_values={"title": "Old Title Tag", "meta_description": "Old meta.", "h1": "Old H1"},
+    )
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+    by_name = {w["textInput"]["name"]: w["textInput"] for w in widgets if "textInput" in w}
+    assert by_name["title_new"]["hintText"] == "Current: Old Title Tag"
+    assert by_name["meta_new"]["hintText"] == "Current: Old meta."
+    assert by_name["h1_new"]["hintText"] == "Current: Old H1"
+
+
+def test_build_url_entry_dialog_truncates_a_long_current_value_hint():
+    dialog = build_url_entry_dialog(
+        "KYZ", "2026-06", "https://kyz.com/a/", count=1,
+        current_values={"meta_description": "x" * 300},
+    )
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+    by_name = {w["textInput"]["name"]: w["textInput"] for w in widgets if "textInput" in w}
+    hint = by_name["meta_new"]["hintText"]
+    assert hint.startswith("Current: ")
+    assert hint.endswith("…")
+    assert len(hint) <= len("Current: ") + 150
+
+
+def test_build_url_entry_dialog_falls_back_to_the_static_hint_with_no_fetched_value():
+    dialog = build_url_entry_dialog("KYZ", "2026-06", "https://kyz.com/a/", count=1, current_values={})
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+    by_name = {w["textInput"]["name"]: w["textInput"] for w in widgets if "textInput" in w}
+    assert "Current:" not in by_name["keyword"].get("hintText", "")
+    assert "hintText" not in by_name["title_new"]
+
+
+def test_build_url_entry_dialog_carries_client_month_url_count_and_current_values_as_button_parameters():
+    dialog = build_url_entry_dialog(
+        "KYZ", "2026-06", "https://kyz.com/a/", count=3,
+        current_values={"title": "Old Title", "meta_description": "Old meta", "h1": "Old H1"},
+    )
     widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
     buttons = next(w for w in widgets if "buttonList" in w)["buttonList"]["buttons"]
 
@@ -53,39 +121,35 @@ def test_build_url_entry_dialog_carries_client_month_count_as_button_parameters(
     assert set(by_text) == {"Next URL", "Done"}
     for button in by_text.values():
         params = {p["key"]: p["value"] for p in button["onClick"]["action"]["parameters"]}
-        assert params == {"client": "KYZ", "month": "2026-06", "count": "3"}
+        assert params == {
+            "client": "KYZ", "month": "2026-06", "url": "https://kyz.com/a/", "count": "3",
+            "current_title": "Old Title", "current_meta_description": "Old meta", "current_h1": "Old H1",
+        }
 
     assert by_text["Next URL"]["onClick"]["action"]["function"] == "saveAndContinue"
     assert by_text["Done"]["onClick"]["action"]["function"] == "saveAndFinish"
 
 
 def test_build_url_entry_dialog_header_shows_client_month_and_count():
-    dialog = build_url_entry_dialog("KYZ", "2026-06", count=2)
+    dialog = build_url_entry_dialog("KYZ", "2026-06", "https://kyz.com/a/", count=2)
     header = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
     assert header == "Page 2 for KYZ (2026-06)"
 
 
-def test_build_url_entry_dialog_header_confirms_the_last_saved_url():
-    dialog = build_url_entry_dialog("KYZ", "2026-06", count=2, last_saved_url="https://kyz.com/a/")
-    header = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
-    assert header.startswith("✓ Saved https://kyz.com/a/")
-
-
 def test_build_url_entry_dialog_prefills_fields_from_a_previous_attempt():
     dialog = build_url_entry_dialog(
-        "KYZ", "2026-06", count=1,
-        prefill={"url": "https://kyz.com/a/", "title_new": "x" * 91},
+        "KYZ", "2026-06", "https://kyz.com/a/", count=1,
+        prefill={"title_new": "x" * 91},
     )
     widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
     by_name = {w["textInput"]["name"]: w["textInput"] for w in widgets if "textInput" in w}
-    assert by_name["url"]["value"] == "https://kyz.com/a/"
     assert by_name["title_new"]["value"] == "x" * 91
     assert "value" not in by_name["geo"]
 
 
 def test_build_url_entry_dialog_shows_error_text_and_header_when_given():
     dialog = build_url_entry_dialog(
-        "KYZ", "2026-06", count=3,
+        "KYZ", "2026-06", "https://kyz.com/a/", count=3,
         error_text="⚠️ title_tag: title tag is 91 characters, must be 60 or fewer (brand name excluded)",
     )
     section = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
@@ -93,14 +157,6 @@ def test_build_url_entry_dialog_shows_error_text_and_header_when_given():
     assert section["widgets"][0]["textParagraph"]["text"] == (
         "⚠️ title_tag: title tag is 91 characters, must be 60 or fewer (brand name excluded)"
     )
-
-
-def test_build_url_entry_dialog_error_text_takes_priority_over_last_saved_url():
-    dialog = build_url_entry_dialog(
-        "KYZ", "2026-06", count=1, last_saved_url="https://kyz.com/prev/", error_text="⚠️ something failed"
-    )
-    header = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
-    assert header.startswith("⚠️ Please fix and resubmit")
 
 
 def test_dialog_ok_closes_with_ok_status():

@@ -12,43 +12,51 @@ from .dialog_cards import (
     REQUIRED_CLIENT_MONTH_FIELDS,
     REQUIRED_URL_FIELDS,
     build_url_entry_dialog,
+    build_url_only_dialog,
     dialog_error,
     dialog_ok,
     extract_button_parameters,
     extract_form_inputs,
     invoked_function,
 )
+from .page_fetch import fetch_current_page_values
 
 
-def _build_capture_text(values: dict[str, str]) -> str:
-    """Assemble a record_page_from_text-compatible labeled-text block from
-    one url-entry step's form values (see page_capture.parse_page_capture)
-    — reuses that tool's own parsing/validation rather than duplicating it
-    here, so the dialog and the conversational labeled-text workflow stay
-    two front ends over the exact same logic. Only url is guaranteed
-    present; every other line is included only if the consultant filled
-    that field in.
+def _build_capture_text(url: str, values: dict[str, str], current_values: dict[str, str]) -> str:
+    """Assemble a record_page_from_text-compatible labeled-text block for
+    one page (see page_capture.parse_page_capture) — reuses that tool's
+    own parsing/validation rather than duplicating it here, so the dialog
+    and the conversational labeled-text workflow stay two front ends over
+    the exact same logic.
+
+    `url`/`current_values` come from the url-only + fetch step (button
+    parameters, not form fields — see build_url_only_dialog /
+    dispatch_dialog_submission's fetchPageAndContinue branch);
+    `values` are the fields step's own form inputs (keyword/geo/new
+    title-meta-h1/cta/headings/notes). The old side of title/meta/h1 comes
+    from whatever was actually fetched off the live page, not typed by the
+    specialist.
     """
-    lines = [f"url: {values.get('url', '').strip()}"]
+    lines = [f"url: {url}"]
 
     def _optional(label: str, key: str) -> None:
         value = values.get(key, "").strip()
         if value:
             lines.append(f"{label}: {value}")
 
-    def _old_new(label: str, old_key: str, new_key: str) -> None:
+    def _old_new(label: str, old_value: str, new_key: str) -> None:
         new_value = values.get(new_key, "").strip()
         if not new_value:
             return
-        old_value = values.get(old_key, "").strip()
+        old_value = (old_value or "").strip()
         lines.append(f"{label}: {old_value} -> {new_value}" if old_value else f"{label}: {new_value}")
 
     _optional("keyword", "keyword")
     _optional("geo", "geo")
-    _old_new("title", "title_old", "title_new")
-    _old_new("meta", "meta_old", "meta_new")
+    _old_new("title", current_values.get("title", ""), "title_new")
+    _old_new("meta", current_values.get("meta_description", ""), "meta_new")
     _optional("cta", "cta")
-    _old_new("h1", "h1_old", "h1_new")
+    _old_new("h1", current_values.get("h1", ""), "h1_new")
 
     # headings/notes preserve internal line breaks (only the block's own
     # leading/trailing whitespace is trimmed) — parse_page_capture reads
@@ -161,11 +169,25 @@ async def _record_one_page(
     return True, f"Recorded {url}.", validation_failures
 
 
+def _current_values_from_parameters(parameters: dict[str, str]) -> dict[str, str]:
+    return {
+        "title": parameters.get("current_title", ""),
+        "meta_description": parameters.get("current_meta_description", ""),
+        "h1": parameters.get("current_h1", ""),
+    }
+
+
 async def dispatch_dialog_submission(event: dict[str, Any], *, mcp_server_url: str) -> dict[str, Any]:
     """Single entry point for every CARD_CLICKED/SUBMIT_DIALOG event in the
     page-update dialog flow — routes on which button was clicked
     (invoked_function) to the matching step handler and returns the next
     Cards v2 dialog response, ready to return as-is from the /chat webhook.
+
+    Flow: startPageEntry (client/month -> url-only step) ->
+    fetchPageAndContinue (url -> fetches the live page, shows the fields
+    step with current-value hints) -> saveAndContinue/saveAndFinish
+    (records the page; saveAndContinue loops back to a fresh url-only step
+    for the next page).
     """
     function = invoked_function(event)
 
@@ -174,9 +196,9 @@ async def dispatch_dialog_submission(event: dict[str, Any], *, mcp_server_url: s
         missing = [name for name in REQUIRED_CLIENT_MONTH_FIELDS if not values.get(name, "").strip()]
         if missing:
             return dialog_error(f"Missing required field(s): {', '.join(missing)}")
-        return build_url_entry_dialog(values["client"].strip(), values["month"].strip(), count=1)
+        return build_url_only_dialog(values["client"].strip(), values["month"].strip(), count=1)
 
-    if function in ("saveAndContinue", "saveAndFinish"):
+    if function == "fetchPageAndContinue":
         parameters = extract_button_parameters(event)
         client = parameters.get("client", "").strip()
         month = parameters.get("month", "").strip()
@@ -193,24 +215,43 @@ async def dispatch_dialog_submission(event: dict[str, Any], *, mcp_server_url: s
             return dialog_error(f"Missing required field(s): {', '.join(missing)}")
 
         url = values["url"].strip()
-        text = _build_capture_text(values)
+        current_values = await fetch_current_page_values(url)
+        return build_url_entry_dialog(client, month, url, count, current_values=current_values)
+
+    if function in ("saveAndContinue", "saveAndFinish"):
+        parameters = extract_button_parameters(event)
+        client = parameters.get("client", "").strip()
+        month = parameters.get("month", "").strip()
+        url = parameters.get("url", "").strip()
+        try:
+            count = int(parameters.get("count", "1"))
+        except ValueError:
+            count = 1
+        if not client or not month or not url:
+            return dialog_error("Lost track of the page being edited — please start over.")
+
+        current_values = _current_values_from_parameters(parameters)
+        values = extract_form_inputs(event)
+        text = _build_capture_text(url, values, current_values)
         ok, message, validation_failures = await _record_one_page(client, month, url, text, mcp_server_url)
         if not ok:
             return dialog_error(message)
 
         if validation_failures:
-            # Re-render *this same page* — same count, fields pre-filled
-            # with what was just typed — rather than silently recording
-            # the failure and moving on (or losing it in the closing
-            # summary). record_page_from_text replaces a touchpoint's
-            # previous answer when called again for the same url, so
-            # resubmitting this exact page after fixing a field corrects
-            # it in place rather than duplicating anything.
+            # Re-render *this same page* — same url, same count, fields
+            # pre-filled with what was just typed — rather than silently
+            # recording the failure and moving on (or losing it in the
+            # closing summary). record_page_from_text replaces a
+            # touchpoint's previous answer when called again for the same
+            # url, so resubmitting after a fix corrects it in place rather
+            # than duplicating anything.
             error_text = "⚠️ " + "<br>".join(validation_failures)
-            return build_url_entry_dialog(client, month, count=count, prefill=values, error_text=error_text)
+            return build_url_entry_dialog(
+                client, month, url, count, current_values=current_values, prefill=values, error_text=error_text,
+            )
 
         if function == "saveAndFinish":
             return dialog_ok(f"{message} All done for {client} ({month}).")
-        return build_url_entry_dialog(client, month, count=count + 1, last_saved_url=url)
+        return build_url_only_dialog(client, month, count=count + 1, last_saved_url=url)
 
     return dialog_error("Unexpected dialog action.")

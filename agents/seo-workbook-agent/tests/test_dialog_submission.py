@@ -6,38 +6,42 @@ from seo_workbook_agent import dialog_submission as ds
 
 
 def test_build_capture_text_includes_only_filled_fields():
-    text = ds._build_capture_text({"url": "https://example.com/a/", "title_new": "New Title"})
+    text = ds._build_capture_text("https://example.com/a/", {"title_new": "New Title"}, {})
     assert text == "url: https://example.com/a/\ntitle: New Title"
 
 
-def test_build_capture_text_joins_old_and_new_with_arrow():
-    text = ds._build_capture_text({
-        "url": "https://example.com/a/", "title_old": "Old Title", "title_new": "New Title",
-    })
+def test_build_capture_text_joins_fetched_old_with_typed_new():
+    text = ds._build_capture_text(
+        "https://example.com/a/", {"title_new": "New Title"}, {"title": "Old Title"}
+    )
     assert "title: Old Title -> New Title" in text
 
 
-def test_build_capture_text_omits_old_new_pair_when_new_is_blank():
-    text = ds._build_capture_text({"url": "https://example.com/a/", "title_old": "Old Title"})
+def test_build_capture_text_omits_title_line_when_new_is_blank():
+    text = ds._build_capture_text("https://example.com/a/", {}, {"title": "Old Title"})
     assert "title" not in text
 
 
 def test_build_capture_text_puts_notes_last_after_headings():
-    text = ds._build_capture_text({
-        "url": "https://example.com/a/",
-        "headings": "H2 -> H3: Checking Over Your Trailer",
-        "notes": "Added internal link to homepage.",
-    })
+    text = ds._build_capture_text(
+        "https://example.com/a/",
+        {
+            "headings": "H2 -> H3: Checking Over Your Trailer",
+            "notes": "Added internal link to homepage.",
+        },
+        {},
+    )
     lines = text.splitlines()
     assert lines[-2] == "headings: H2 -> H3: Checking Over Your Trailer"
     assert lines[-1] == "notes: Added internal link to homepage."
 
 
 def test_build_capture_text_preserves_multiline_headings_block():
-    text = ds._build_capture_text({
-        "url": "https://example.com/a/",
-        "headings": "H2 -> H3: Checking Over Your Trailer\nH3: Emergency Equipment",
-    })
+    text = ds._build_capture_text(
+        "https://example.com/a/",
+        {"headings": "H2 -> H3: Checking Over Your Trailer\nH3: Emergency Equipment"},
+        {},
+    )
     assert text == (
         "url: https://example.com/a/\n"
         "headings: H2 -> H3: Checking Over Your Trailer\nH3: Emergency Equipment"
@@ -100,6 +104,19 @@ def patch_mcp(monkeypatch):
     return _patch
 
 
+@pytest.fixture
+def patch_page_fetch(monkeypatch):
+    def _patch(current_values: dict[str, str]):
+        async def fake_fetch(url):
+            fake_fetch.received_url = url
+            return current_values
+
+        monkeypatch.setattr(ds, "fetch_current_page_values", fake_fetch)
+        return fake_fetch
+
+    return _patch
+
+
 def _form_inputs(**fields):
     return {"formInputs": {name: {"stringInputs": {"value": [value]}} for name, value in fields.items()}}
 
@@ -115,6 +132,10 @@ def _button_click(function, parameters=None, **fields):
     return event
 
 
+# ---------------------------------------------------------------------------
+# startPageEntry
+# ---------------------------------------------------------------------------
+
 async def test_start_page_entry_requires_client_and_month():
     event = _button_click("startPageEntry")
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
@@ -124,41 +145,92 @@ async def test_start_page_entry_requires_client_and_month():
     assert "month" in status["userFacingMessage"]
 
 
-async def test_start_page_entry_returns_the_first_url_entry_dialog():
+async def test_start_page_entry_returns_the_url_only_dialog():
     event = _button_click("startPageEntry", client="North Texas Trailers", month="2026-07")
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
-    header = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
-    assert header == "Page 1 for North Texas Trailers (2026-07)"
+    dialog = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
+    assert dialog["header"] == "Page 1 for North Texas Trailers (2026-07)"
+    text_input_names = [w["textInput"]["name"] for w in dialog["widgets"] if "textInput" in w]
+    assert text_input_names == ["url"]
 
 
-async def test_save_and_continue_requires_url(patch_mcp):
-    patch_mcp({})
-    event = _button_click("saveAndContinue", parameters={"client": "KYZ", "month": "2026-06", "count": "1"})
+# ---------------------------------------------------------------------------
+# fetchPageAndContinue
+# ---------------------------------------------------------------------------
+
+async def test_fetch_page_and_continue_requires_url():
+    event = _button_click("fetchPageAndContinue", parameters={"client": "KYZ", "month": "2026-06", "count": "1"})
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
     status = result["actionResponse"]["dialogAction"]["actionStatus"]
     assert status["statusCode"] == "INVALID_ARGUMENT"
     assert "url" in status["userFacingMessage"]
 
 
-async def test_save_and_continue_records_the_page_and_returns_the_next_url_dialog(patch_mcp):
-    session = patch_mcp({
-        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
-        "record_page_from_text": _FakeToolResult(structured={"touchpoints": []}),
-    })
+async def test_fetch_page_and_continue_errors_when_client_month_parameters_missing():
+    event = _button_click("fetchPageAndContinue", url="https://kyz.com/a/")
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+    status = result["actionResponse"]["dialogAction"]["actionStatus"]
+    assert status["statusCode"] == "INVALID_ARGUMENT"
+
+
+async def test_fetch_page_and_continue_fetches_the_typed_url_and_shows_the_fields_step(patch_page_fetch):
+    fake_fetch = patch_page_fetch({"title": "Old Title", "meta_description": "Old meta", "h1": "Old H1"})
     event = _button_click(
-        "saveAndContinue",
+        "fetchPageAndContinue",
         parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
         url="https://kyz.com/a/",
     )
 
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
 
+    assert fake_fetch.received_url == "https://kyz.com/a/"
+    dialog = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
+    assert dialog["widgets"][0]["textParagraph"]["text"] == "Editing: https://kyz.com/a/"
+    by_name = {w["textInput"]["name"]: w["textInput"] for w in dialog["widgets"] if "textInput" in w}
+    assert by_name["title_new"]["hintText"] == "Current: Old Title"
+    assert by_name["meta_new"]["hintText"] == "Current: Old meta"
+    assert by_name["h1_new"]["hintText"] == "Current: Old H1"
+
+
+# ---------------------------------------------------------------------------
+# saveAndContinue / saveAndFinish
+# ---------------------------------------------------------------------------
+
+async def test_save_and_continue_requires_client_month_and_url_parameters():
+    event = _button_click("saveAndContinue")
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+    status = result["actionResponse"]["dialogAction"]["actionStatus"]
+    assert status["statusCode"] == "INVALID_ARGUMENT"
+
+
+async def test_save_and_continue_records_the_page_using_fetched_old_values(patch_mcp):
+    session = patch_mcp({
+        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
+        "record_page_from_text": _FakeToolResult(structured={"touchpoints": []}),
+    })
+    event = _button_click(
+        "saveAndContinue",
+        parameters={
+            "client": "KYZ", "month": "2026-06", "url": "https://kyz.com/a/", "count": "1",
+            "current_title": "Old Title", "current_meta_description": "", "current_h1": "",
+        },
+        title_new="New Title",
+    )
+
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+
     tool_names = [name for name, _ in session.calls]
     assert tool_names == ["find_session", "record_page_from_text"]
-    assert session.calls[1][1] == {"session_id": "kyz-2026-06", "text": "url: https://kyz.com/a/"}
+    assert session.calls[1][1] == {
+        "session_id": "kyz-2026-06",
+        "text": "url: https://kyz.com/a/\ntitle: Old Title -> New Title",
+    }
 
-    header = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
-    assert header == "✓ Saved https://kyz.com/a/ — Page 2 for KYZ (2026-06)"
+    # "Next URL" success returns to a fresh url-only step for the next page.
+    dialog = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
+    assert dialog["header"] == "✓ Saved https://kyz.com/a/ — Page 2 for KYZ (2026-06)"
+    text_input_names = [w["textInput"]["name"] for w in dialog["widgets"] if "textInput" in w]
+    assert text_input_names == ["url"]
 
 
 async def test_save_and_continue_starts_a_session_when_none_found(patch_mcp):
@@ -169,8 +241,7 @@ async def test_save_and_continue_starts_a_session_when_none_found(patch_mcp):
     })
     event = _button_click(
         "saveAndContinue",
-        parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
-        url="https://kyz.com/a/",
+        parameters={"client": "KYZ", "month": "2026-06", "url": "https://kyz.com/a/", "count": "1"},
     )
 
     await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
@@ -186,8 +257,7 @@ async def test_save_and_finish_closes_the_dialog(patch_mcp):
     })
     event = _button_click(
         "saveAndFinish",
-        parameters={"client": "KYZ", "month": "2026-06", "count": "3"},
-        url="https://kyz.com/c/",
+        parameters={"client": "KYZ", "month": "2026-06", "url": "https://kyz.com/c/", "count": "3"},
     )
 
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
@@ -209,21 +279,20 @@ async def test_save_and_finish_surfaces_failed_validation(patch_mcp):
     })
     event = _button_click(
         "saveAndFinish",
-        parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
-        url="https://kyz.com/a/",
+        parameters={"client": "KYZ", "month": "2026-06", "url": "https://kyz.com/a/", "count": "1"},
         meta_new="Great meta with no cta",
     )
 
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
 
     # A validation failure blocks finishing too — re-renders the *same*
-    # page (same count, fields pre-filled) with the real message shown,
-    # rather than closing with the failure buried in a footnote.
+    # page (same url, same count, fields pre-filled) with the real message
+    # shown, rather than closing with the failure buried in a footnote.
     dialog = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
     assert "meta_description: needs a cta" in dialog["widgets"][0]["textParagraph"]["text"]
     assert dialog["header"] == "⚠️ Please fix and resubmit — Page 1 for KYZ (2026-06)"
+    assert dialog["widgets"][1]["textParagraph"]["text"] == "Editing: https://kyz.com/a/"
     prefilled = {w["textInput"]["name"]: w["textInput"].get("value") for w in dialog["widgets"] if "textInput" in w}
-    assert prefilled["url"] == "https://kyz.com/a/"
     assert prefilled["meta_new"] == "Great meta with no cta"
 
 
@@ -244,8 +313,7 @@ async def test_save_and_continue_re_renders_the_same_page_on_validation_failure(
     })
     event = _button_click(
         "saveAndContinue",
-        parameters={"client": "KYZ", "month": "2026-06", "count": "2"},
-        url="https://kyz.com/a/",
+        parameters={"client": "KYZ", "month": "2026-06", "url": "https://kyz.com/a/", "count": "2"},
         title_new="x" * 91,
     )
 
@@ -264,8 +332,7 @@ async def test_save_and_finish_reports_record_failure(patch_mcp):
     })
     event = _button_click(
         "saveAndFinish",
-        parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
-        url="https://kyz.com/a/",
+        parameters={"client": "KYZ", "month": "2026-06", "url": "https://kyz.com/a/", "count": "1"},
     )
 
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
@@ -273,13 +340,6 @@ async def test_save_and_finish_reports_record_failure(patch_mcp):
     status = result["actionResponse"]["dialogAction"]["actionStatus"]
     assert status["statusCode"] == "INVALID_ARGUMENT"
     assert "Page not found" in status["userFacingMessage"]
-
-
-async def test_save_and_continue_errors_when_client_month_parameters_are_missing():
-    event = _button_click("saveAndContinue", url="https://kyz.com/a/")
-    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
-    status = result["actionResponse"]["dialogAction"]["actionStatus"]
-    assert status["statusCode"] == "INVALID_ARGUMENT"
 
 
 async def test_unknown_invoked_function_returns_an_error():

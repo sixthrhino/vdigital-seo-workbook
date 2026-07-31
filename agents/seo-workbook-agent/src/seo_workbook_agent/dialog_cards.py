@@ -2,27 +2,28 @@ from __future__ import annotations
 
 from typing import Any
 
-# Step 2's field set mirrors record_page_from_text's whole field set (see
-# seo_workbook_common.page_capture.parse_page_capture) minus client/month —
-# those are collected once in step 1 (build_client_month_dialog) and carried
-# forward through every url-entry step's button parameters instead of being
-# re-typed per page, since a specialist typically enters 5-7 pages per
-# client/month in one sitting and re-invoking the slash command per page (or
-# re-typing the client/month each time) would defeat the point of a form.
+# The page-fields step's set mirrors record_page_from_text's whole field
+# set (see seo_workbook_common.page_capture.parse_page_capture) minus
+# client/month (collected once in step 1) and minus url and the old_*
+# fields (collected/fetched in the url-only step — see
+# build_url_only_dialog and page_fetch.fetch_current_page_values). A
+# specialist typically enters 5-7 pages per client/month in one sitting,
+# so nothing already known gets re-typed per page.
 _URL_FIELDS: list[tuple[str, str, str, bool]] = [
-    ("url", "Page URL", "", False),
     ("keyword", "Primary keyword", 'e.g. "auto insurance (500)"', False),
     ("geo", "Target geo", "", False),
-    ("title_old", "Old title tag", "", False),
     ("title_new", "New title tag", "", False),
-    ("meta_old", "Old meta description", "", False),
     ("meta_new", "New meta description", "", False),
     ("cta", "CTA", "", False),
-    ("h1_old", "Old H1", "", False),
     ("h1_new", "New H1", "", False),
     ("headings", "Headings changed", 'One per line: "H2 -> H3: text" or just "H3: text"', True),
     ("notes", "Other notes", "Links added, schema, alt text, etc.", True),
 ]
+
+# Which fetched current-page value (see page_fetch.fetch_current_page_values)
+# backs each new-value field's hint text, when one was found.
+_CURRENT_VALUE_HINT_SOURCE = {"title_new": "title", "meta_new": "meta_description", "h1_new": "h1"}
+_HINT_TRUNCATE = 150
 
 REQUIRED_CLIENT_MONTH_FIELDS = ("client", "month")
 REQUIRED_URL_FIELDS = ("url",)
@@ -63,40 +64,93 @@ def build_client_month_dialog() -> dict[str, Any]:
     return _dialog_response("Record page updates", widgets)
 
 
+def build_url_only_dialog(client: str, month: str, count: int, last_saved_url: str | None = None) -> dict[str, Any]:
+    """Middle step: just the page URL, submitted before any of its fields
+    are shown — so the live page can be fetched (see
+    page_fetch.fetch_current_page_values) and its current title/meta
+    description/H1 shown as hint text on the next step's corresponding
+    fields, instead of the specialist having to look those up and paste
+    them in by hand.
+    """
+    parameters = [
+        {"key": "client", "value": client},
+        {"key": "month", "value": month},
+        {"key": "count", "value": str(count)},
+    ]
+    widgets: list[dict[str, Any]] = [
+        {"textInput": {"name": "url", "label": "Page URL"}},
+        {
+            "buttonList": {
+                "buttons": [{
+                    "text": "Next",
+                    "onClick": {"action": {"function": "fetchPageAndContinue", "parameters": parameters}},
+                }]
+            }
+        },
+    ]
+    header = f"Page {count} for {client} ({month})"
+    if last_saved_url:
+        header = f"✓ Saved {last_saved_url} — {header}"
+    return _dialog_response(header, widgets)
+
+
+def _current_value_hint(name: str, current_values: dict[str, str]) -> str | None:
+    source_key = _CURRENT_VALUE_HINT_SOURCE.get(name)
+    if not source_key:
+        return None
+    value = (current_values or {}).get(source_key, "").strip()
+    if not value:
+        return None
+    if len(value) > _HINT_TRUNCATE:
+        value = value[: _HINT_TRUNCATE - 1] + "…"
+    return f"Current: {value}"
+
+
 def build_url_entry_dialog(
     client: str,
     month: str,
+    url: str,
     count: int,
-    last_saved_url: str | None = None,
+    current_values: dict[str, str] | None = None,
     prefill: dict[str, str] | None = None,
     error_text: str | None = None,
 ) -> dict[str, Any]:
-    """One page's worth of record_page_from_text's fields, repeatable —
-    "Next URL" saves this page and re-renders a fresh copy of this same
-    card for the next one; "Done" saves this page and closes the dialog.
-    Both buttons operate on whatever is currently filled in, so "Done" is
-    only ever clicked on a page that actually has data, never a blank one.
+    """One page's fields (minus url, minus the old_* values — see
+    build_url_only_dialog and page_fetch.fetch_current_page_values),
+    repeatable — "Next URL" saves this page and returns to a fresh
+    build_url_only_dialog for the next one; "Done" saves this page and
+    closes the dialog. Both buttons operate on whatever is currently
+    filled in, so "Done" is only ever clicked on a page that actually has
+    data, never a blank one.
 
-    client/month/count ride along on both buttons' action.parameters
-    rather than being shown as fields here — they're locked in from step 1
-    for the whole batch, not re-editable per page in this first version.
+    client/month/count/url and the fetched current_values all ride along
+    on both buttons' action.parameters rather than being shown as fields
+    here — they're locked in for this page, not re-editable in this first
+    version.
 
     `error_text`/`prefill`: when a save comes back with a failed
     touchpoint (see dialog_submission._record_one_page), the caller
-    re-renders *this exact page* — same count, fields pre-filled with what
-    was just typed (not blanked out) — with the real validation message
-    shown up top, so the specialist can fix and resubmit in place instead
-    of the failure being silently recorded and only surfacing (if at all)
-    in the closing summary.
+    re-renders *this exact page* — same url, same count, fields pre-filled
+    with what was just typed (not blanked out) — with the real validation
+    message shown up top, so the specialist can fix and resubmit in place
+    instead of the failure being silently recorded and only surfacing (if
+    at all) in the closing summary. current_values (the fetched hints)
+    are carried through unchanged on a retry — no need to re-fetch the
+    same page.
     """
     widgets: list[dict[str, Any]] = []
     if error_text:
         widgets.append({"textParagraph": {"text": error_text}})
+    widgets.append({"textParagraph": {"text": f"Editing: {url}"}})
 
+    current_values = current_values or {}
     prefill = prefill or {}
     for name, label, hint, multiline in _URL_FIELDS:
         text_input: dict[str, Any] = {"name": name, "label": label}
-        if hint:
+        dynamic_hint = _current_value_hint(name, current_values)
+        if dynamic_hint:
+            text_input["hintText"] = dynamic_hint
+        elif hint:
             text_input["hintText"] = hint
         if multiline:
             text_input["type"] = "MULTIPLE_LINE"
@@ -107,7 +161,11 @@ def build_url_entry_dialog(
     parameters = [
         {"key": "client", "value": client},
         {"key": "month", "value": month},
+        {"key": "url", "value": url},
         {"key": "count", "value": str(count)},
+        {"key": "current_title", "value": current_values.get("title", "")},
+        {"key": "current_meta_description", "value": current_values.get("meta_description", "")},
+        {"key": "current_h1", "value": current_values.get("h1", "")},
     ]
     widgets.append({
         "buttonList": {
@@ -121,8 +179,6 @@ def build_url_entry_dialog(
     header = f"Page {count} for {client} ({month})"
     if error_text:
         header = f"⚠️ Please fix and resubmit — {header}"
-    elif last_saved_url:
-        header = f"✓ Saved {last_saved_url} — {header}"
     return _dialog_response(header, widgets)
 
 
