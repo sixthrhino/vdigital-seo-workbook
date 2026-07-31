@@ -64,7 +64,12 @@ def build_client_month_dialog() -> dict[str, Any]:
 
 
 def build_url_entry_dialog(
-    client: str, month: str, count: int, last_saved_url: str | None = None
+    client: str,
+    month: str,
+    count: int,
+    last_saved_url: str | None = None,
+    prefill: dict[str, str] | None = None,
+    error_text: str | None = None,
 ) -> dict[str, Any]:
     """One page's worth of record_page_from_text's fields, repeatable —
     "Next URL" saves this page and re-renders a fresh copy of this same
@@ -75,14 +80,28 @@ def build_url_entry_dialog(
     client/month/count ride along on both buttons' action.parameters
     rather than being shown as fields here — they're locked in from step 1
     for the whole batch, not re-editable per page in this first version.
+
+    `error_text`/`prefill`: when a save comes back with a failed
+    touchpoint (see dialog_submission._record_one_page), the caller
+    re-renders *this exact page* — same count, fields pre-filled with what
+    was just typed (not blanked out) — with the real validation message
+    shown up top, so the specialist can fix and resubmit in place instead
+    of the failure being silently recorded and only surfacing (if at all)
+    in the closing summary.
     """
     widgets: list[dict[str, Any]] = []
+    if error_text:
+        widgets.append({"textParagraph": {"text": error_text}})
+
+    prefill = prefill or {}
     for name, label, hint, multiline in _URL_FIELDS:
         text_input: dict[str, Any] = {"name": name, "label": label}
         if hint:
             text_input["hintText"] = hint
         if multiline:
             text_input["type"] = "MULTIPLE_LINE"
+        if prefill.get(name):
+            text_input["value"] = prefill[name]
         widgets.append({"textInput": text_input})
 
     parameters = [
@@ -100,7 +119,9 @@ def build_url_entry_dialog(
     })
 
     header = f"Page {count} for {client} ({month})"
-    if last_saved_url:
+    if error_text:
+        header = f"⚠️ Please fix and resubmit — {header}"
+    elif last_saved_url:
         header = f"✓ Saved {last_saved_url} — {header}"
     return _dialog_response(header, widgets)
 

@@ -211,13 +211,50 @@ async def test_save_and_finish_surfaces_failed_validation(patch_mcp):
         "saveAndFinish",
         parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
         url="https://kyz.com/a/",
+        meta_new="Great meta with no cta",
     )
 
     result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
 
-    status = result["actionResponse"]["dialogAction"]["actionStatus"]
-    assert status["statusCode"] == "OK"
-    assert "meta_description" in status["userFacingMessage"]
+    # A validation failure blocks finishing too — re-renders the *same*
+    # page (same count, fields pre-filled) with the real message shown,
+    # rather than closing with the failure buried in a footnote.
+    dialog = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
+    assert "meta_description: needs a cta" in dialog["widgets"][0]["textParagraph"]["text"]
+    assert dialog["header"] == "⚠️ Please fix and resubmit — Page 1 for KYZ (2026-06)"
+    prefilled = {w["textInput"]["name"]: w["textInput"].get("value") for w in dialog["widgets"] if "textInput" in w}
+    assert prefilled["url"] == "https://kyz.com/a/"
+    assert prefilled["meta_new"] == "Great meta with no cta"
+
+
+async def test_save_and_continue_re_renders_the_same_page_on_validation_failure(patch_mcp):
+    patch_mcp({
+        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
+        "record_page_from_text": _FakeToolResult(structured={
+            "touchpoints": [
+                {
+                    "touchpoint_id": "title_tag",
+                    "validation": {
+                        "passed": False,
+                        "messages": ["title tag is 91 characters, must be 60 or fewer (brand name excluded)"],
+                    },
+                },
+            ]
+        }),
+    })
+    event = _button_click(
+        "saveAndContinue",
+        parameters={"client": "KYZ", "month": "2026-06", "count": "2"},
+        url="https://kyz.com/a/",
+        title_new="x" * 91,
+    )
+
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+
+    dialog = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
+    assert "title tag is 91 characters" in dialog["widgets"][0]["textParagraph"]["text"]
+    # Same page number as the attempt that failed — not advanced to page 3.
+    assert dialog["header"] == "⚠️ Please fix and resubmit — Page 2 for KYZ (2026-06)"
 
 
 async def test_save_and_finish_reports_record_failure(patch_mcp):

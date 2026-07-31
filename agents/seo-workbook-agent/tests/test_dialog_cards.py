@@ -71,6 +71,38 @@ def test_build_url_entry_dialog_header_confirms_the_last_saved_url():
     assert header.startswith("✓ Saved https://kyz.com/a/")
 
 
+def test_build_url_entry_dialog_prefills_fields_from_a_previous_attempt():
+    dialog = build_url_entry_dialog(
+        "KYZ", "2026-06", count=1,
+        prefill={"url": "https://kyz.com/a/", "title_new": "x" * 91},
+    )
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+    by_name = {w["textInput"]["name"]: w["textInput"] for w in widgets if "textInput" in w}
+    assert by_name["url"]["value"] == "https://kyz.com/a/"
+    assert by_name["title_new"]["value"] == "x" * 91
+    assert "value" not in by_name["geo"]
+
+
+def test_build_url_entry_dialog_shows_error_text_and_header_when_given():
+    dialog = build_url_entry_dialog(
+        "KYZ", "2026-06", count=3,
+        error_text="⚠️ title_tag: title tag is 91 characters, must be 60 or fewer (brand name excluded)",
+    )
+    section = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
+    assert section["header"] == "⚠️ Please fix and resubmit — Page 3 for KYZ (2026-06)"
+    assert section["widgets"][0]["textParagraph"]["text"] == (
+        "⚠️ title_tag: title tag is 91 characters, must be 60 or fewer (brand name excluded)"
+    )
+
+
+def test_build_url_entry_dialog_error_text_takes_priority_over_last_saved_url():
+    dialog = build_url_entry_dialog(
+        "KYZ", "2026-06", count=1, last_saved_url="https://kyz.com/prev/", error_text="⚠️ something failed"
+    )
+    header = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
+    assert header.startswith("⚠️ Please fix and resubmit")
+
+
 def test_dialog_ok_closes_with_ok_status():
     result = dialog_ok("Recorded!")
     status = result["actionResponse"]["dialogAction"]["actionStatus"]

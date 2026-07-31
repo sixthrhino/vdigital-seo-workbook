@@ -107,14 +107,24 @@ async def _fetch_mcp_auth_headers(mcp_server_url: str) -> dict[str, str] | None:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _record_one_page(client: str, month: str, url: str, text: str, mcp_server_url: str) -> tuple[bool, str]:
+async def _record_one_page(
+    client: str, month: str, url: str, text: str, mcp_server_url: str
+) -> tuple[bool, str, list[str]]:
     """Find or start the client/month session, then record one page
     through record_page_from_text — deterministically, with no LLM in this
     path at all (mirrors seo-testing-agent's review_plan_against_live_site
     calling its MCP server directly rather than through the agent's
-    tool-calling loop). Returns (ok, message) rather than raising, since
-    every caller needs to turn the result into a dialog response either
-    way.
+    tool-calling loop).
+
+    Returns (ok, message, validation_failures) rather than raising:
+    - ok=False means the call itself failed (bad session, MCP
+      unreachable) — message explains why, validation_failures is empty.
+    - ok=True, validation_failures non-empty means it was recorded but at
+      least one touchpoint failed validation (e.g. a title tag over the
+      character limit) — validation_failures holds the real per-touchpoint
+      messages (not just which touchpoint_id), one per failed check, so
+      the caller can show the specialist exactly what to fix rather than
+      just naming the touchpoint.
     """
     headers = await _fetch_mcp_auth_headers(mcp_server_url)
 
@@ -127,7 +137,7 @@ async def _record_one_page(client: str, month: str, url: str, text: str, mcp_ser
                 if find_result.isError:
                     start_result = await session.call_tool("start_session", {"client": client, "month": month})
                     if start_result.isError:
-                        return False, f"Couldn't start a session: {_error_text(start_result)}"
+                        return False, f"Couldn't start a session: {_error_text(start_result)}", []
                     session_id = _extract_result(start_result)["session_id"]
                 else:
                     session_id = _extract_result(find_result)["session_id"]
@@ -136,19 +146,19 @@ async def _record_one_page(client: str, month: str, url: str, text: str, mcp_ser
                     "record_page_from_text", {"session_id": session_id, "text": text}
                 )
                 if record_result.isError:
-                    return False, f"Couldn't record {url}: {_error_text(record_result)}"
+                    return False, f"Couldn't record {url}: {_error_text(record_result)}", []
 
                 page = _extract_result(record_result)
     except Exception as exc:
-        return False, f"Couldn't reach the workbook service: {exc}"
+        return False, f"Couldn't reach the workbook service: {exc}", []
 
-    failed = [
-        tp.get("touchpoint_id") for tp in page.get("touchpoints", [])
+    validation_failures = [
+        f"{tp.get('touchpoint_id')}: {msg}"
+        for tp in page.get("touchpoints", [])
         if not (tp.get("validation") or {}).get("passed", True)
+        for msg in (tp.get("validation") or {}).get("messages", [])
     ]
-    if failed:
-        return True, f"Recorded {url} — but needs attention: {', '.join(failed)}"
-    return True, f"Recorded {url}."
+    return True, f"Recorded {url}.", validation_failures
 
 
 async def dispatch_dialog_submission(event: dict[str, Any], *, mcp_server_url: str) -> dict[str, Any]:
@@ -184,9 +194,20 @@ async def dispatch_dialog_submission(event: dict[str, Any], *, mcp_server_url: s
 
         url = values["url"].strip()
         text = _build_capture_text(values)
-        ok, message = await _record_one_page(client, month, url, text, mcp_server_url)
+        ok, message, validation_failures = await _record_one_page(client, month, url, text, mcp_server_url)
         if not ok:
             return dialog_error(message)
+
+        if validation_failures:
+            # Re-render *this same page* — same count, fields pre-filled
+            # with what was just typed — rather than silently recording
+            # the failure and moving on (or losing it in the closing
+            # summary). record_page_from_text replaces a touchpoint's
+            # previous answer when called again for the same url, so
+            # resubmitting this exact page after fixing a field corrects
+            # it in place rather than duplicating anything.
+            error_text = "⚠️ " + "<br>".join(validation_failures)
+            return build_url_entry_dialog(client, month, count=count, prefill=values, error_text=error_text)
 
         if function == "saveAndFinish":
             return dialog_ok(f"{message} All done for {client} ({month}).")
