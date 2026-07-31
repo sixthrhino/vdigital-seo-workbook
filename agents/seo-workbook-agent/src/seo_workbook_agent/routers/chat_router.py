@@ -10,8 +10,8 @@ from ..chat_auth import ChatAuthError, verify_chat_bearer_token
 from ..chat_client import post_chat_message
 from ..chat_formatting import extract_message, to_chat_markup
 from ..config import get_agent_settings
-from ..dialog_cards import build_page_update_dialog, extract_form_inputs, is_dialog_submission, is_slash_command
-from ..dialog_submission import handle_dialog_submission
+from ..dialog_cards import build_client_month_dialog, is_dialog_submission, is_slash_command
+from ..dialog_submission import dispatch_dialog_submission
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -69,12 +69,15 @@ async def chat(
     # turn (see _process_and_reply above), which replies asynchronously
     # because a multi-tool-call agent turn can run long. Both branches
     # below are awaited here rather than backgrounded for that reason.
+    # It's a multi-step flow (client/month, then one repeatable url-entry
+    # step per page — see dialog_cards.py) — every step after the first
+    # arrives as the same SUBMIT_DIALOG event type, dispatched internally
+    # by dispatch_dialog_submission based on which button was clicked.
     if is_slash_command(event):
-        return build_page_update_dialog()
+        return build_client_month_dialog()
 
     if is_dialog_submission(event):
-        values = extract_form_inputs(event)
-        return await handle_dialog_submission(values, mcp_server_url=settings.mcp_server_url)
+        return await dispatch_dialog_submission(event, mcp_server_url=settings.mcp_server_url)
 
     parsed = extract_message(event)
     if parsed is None:

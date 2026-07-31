@@ -1,36 +1,74 @@
 from seo_workbook_agent.dialog_cards import (
-    build_page_update_dialog,
+    build_client_month_dialog,
+    build_url_entry_dialog,
     dialog_error,
     dialog_ok,
+    extract_button_parameters,
     extract_form_inputs,
+    invoked_function,
     is_dialog_submission,
     is_slash_command,
 )
 
 
-def test_build_page_update_dialog_has_a_client_url_month_and_submit_button():
-    dialog = build_page_update_dialog()
+def test_build_client_month_dialog_has_client_and_month_fields_and_a_next_button():
+    dialog = build_client_month_dialog()
     widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
 
     text_input_names = [w["textInput"]["name"] for w in widgets if "textInput" in w]
-    assert "client" in text_input_names
-    assert "month" in text_input_names
+    assert text_input_names == ["client", "month"]
+
+    button_widgets = [w for w in widgets if "buttonList" in w]
+    assert len(button_widgets) == 1
+    assert button_widgets[0]["buttonList"]["buttons"][0]["onClick"]["action"]["function"] == "startPageEntry"
+
+
+def test_build_url_entry_dialog_has_the_full_page_field_set():
+    dialog = build_url_entry_dialog("North Texas Trailers", "2026-07", count=1)
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+
+    text_input_names = [w["textInput"]["name"] for w in widgets if "textInput" in w]
+    assert "client" not in text_input_names
+    assert "month" not in text_input_names
     assert "url" in text_input_names
     assert "headings" in text_input_names
     assert "notes" in text_input_names
 
-    button_widgets = [w for w in widgets if "buttonList" in w]
-    assert len(button_widgets) == 1
-    assert button_widgets[0]["buttonList"]["buttons"][0]["onClick"]["action"]["function"] == "submitPageUpdate"
 
-
-def test_build_page_update_dialog_marks_headings_and_notes_multiline():
-    dialog = build_page_update_dialog()
+def test_build_url_entry_dialog_marks_headings_and_notes_multiline():
+    dialog = build_url_entry_dialog("KYZ", "2026-06", count=1)
     widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
     by_name = {w["textInput"]["name"]: w["textInput"] for w in widgets if "textInput" in w}
     assert by_name["headings"]["type"] == "MULTIPLE_LINE"
     assert by_name["notes"]["type"] == "MULTIPLE_LINE"
-    assert "type" not in by_name["client"]
+    assert "type" not in by_name["url"]
+
+
+def test_build_url_entry_dialog_carries_client_month_count_as_button_parameters():
+    dialog = build_url_entry_dialog("KYZ", "2026-06", count=3)
+    widgets = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["widgets"]
+    buttons = next(w for w in widgets if "buttonList" in w)["buttonList"]["buttons"]
+
+    by_text = {b["text"]: b for b in buttons}
+    assert set(by_text) == {"Next URL", "Done"}
+    for button in by_text.values():
+        params = {p["key"]: p["value"] for p in button["onClick"]["action"]["parameters"]}
+        assert params == {"client": "KYZ", "month": "2026-06", "count": "3"}
+
+    assert by_text["Next URL"]["onClick"]["action"]["function"] == "saveAndContinue"
+    assert by_text["Done"]["onClick"]["action"]["function"] == "saveAndFinish"
+
+
+def test_build_url_entry_dialog_header_shows_client_month_and_count():
+    dialog = build_url_entry_dialog("KYZ", "2026-06", count=2)
+    header = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
+    assert header == "Page 2 for KYZ (2026-06)"
+
+
+def test_build_url_entry_dialog_header_confirms_the_last_saved_url():
+    dialog = build_url_entry_dialog("KYZ", "2026-06", count=2, last_saved_url="https://kyz.com/a/")
+    header = dialog["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
+    assert header.startswith("✓ Saved https://kyz.com/a/")
 
 
 def test_dialog_ok_closes_with_ok_status():
@@ -66,6 +104,32 @@ def test_extract_form_inputs_handles_a_blank_field():
 
 def test_extract_form_inputs_returns_empty_dict_with_no_form_inputs():
     assert extract_form_inputs({}) == {}
+
+
+def test_invoked_function_reads_common_invoked_function():
+    assert invoked_function({"common": {"invokedFunction": "saveAndContinue"}}) == "saveAndContinue"
+
+
+def test_invoked_function_falls_back_to_action_method_name():
+    assert invoked_function({"action": {"actionMethodName": "saveAndFinish"}}) == "saveAndFinish"
+
+
+def test_invoked_function_none_when_absent():
+    assert invoked_function({}) is None
+
+
+def test_extract_button_parameters_from_common_parameters_map():
+    event = {"common": {"parameters": {"client": "KYZ", "month": "2026-06"}}}
+    assert extract_button_parameters(event) == {"client": "KYZ", "month": "2026-06"}
+
+
+def test_extract_button_parameters_from_action_parameters_list():
+    event = {"action": {"parameters": [{"key": "client", "value": "KYZ"}, {"key": "month", "value": "2026-06"}]}}
+    assert extract_button_parameters(event) == {"client": "KYZ", "month": "2026-06"}
+
+
+def test_extract_button_parameters_empty_when_absent():
+    assert extract_button_parameters({}) == {}
 
 
 def test_is_slash_command_true_when_message_has_slash_command():

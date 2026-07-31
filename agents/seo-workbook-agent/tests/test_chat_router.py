@@ -230,15 +230,15 @@ def test_chat_returns_the_page_update_dialog_for_the_slash_command(monkeypatch):
     assert fake_chat_service.spaces_resource.messages_resource.create_calls == []
 
 
-def test_chat_routes_dialog_submission_to_handle_dialog_submission(monkeypatch):
+def test_chat_routes_dialog_submission_to_dispatch_dialog_submission(monkeypatch):
     client, stub, fake_chat_service = _client(monkeypatch)
 
-    async def fake_handler(values, *, mcp_server_url):
-        fake_handler.received = values
+    async def fake_dispatch(event, *, mcp_server_url):
+        fake_dispatch.received = event
         return {"actionResponse": {"dialogAction": {"actionStatus": {"statusCode": "OK", "userFacingMessage": "ok"}}}}
 
     with patch(VERIFY_PATH), patch(
-        "seo_workbook_agent.routers.chat_router.handle_dialog_submission", side_effect=fake_handler
+        "seo_workbook_agent.routers.chat_router.dispatch_dialog_submission", side_effect=fake_dispatch
     ):
         response = client.post(
             "/chat",
@@ -246,14 +246,17 @@ def test_chat_routes_dialog_submission_to_handle_dialog_submission(monkeypatch):
             json={
                 "type": "CARD_CLICKED",
                 "dialogEventType": "SUBMIT_DIALOG",
-                "common": {"formInputs": {"client": {"stringInputs": {"value": ["KYZ"]}}}},
+                "common": {
+                    "invokedFunction": "startPageEntry",
+                    "formInputs": {"client": {"stringInputs": {"value": ["KYZ"]}}},
+                },
                 "space": {"name": "spaces/AAAA"},
                 "user": {"name": "users/123"},
             },
         )
     assert response.status_code == 200
     assert response.json()["actionResponse"]["dialogAction"]["actionStatus"]["userFacingMessage"] == "ok"
-    assert fake_handler.received == {"client": "KYZ"}
+    assert fake_dispatch.received["common"]["invokedFunction"] == "startPageEntry"
     # Same as the slash command: no conversational agent turn, no async post.
     assert stub.calls == []
     assert fake_chat_service.spaces_resource.messages_resource.create_calls == []

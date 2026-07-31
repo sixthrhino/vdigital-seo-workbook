@@ -8,16 +8,26 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from .adk_agent import mcp_audience
-from .dialog_cards import REQUIRED_FIELDS, dialog_error, dialog_ok
+from .dialog_cards import (
+    REQUIRED_CLIENT_MONTH_FIELDS,
+    REQUIRED_URL_FIELDS,
+    build_url_entry_dialog,
+    dialog_error,
+    dialog_ok,
+    extract_button_parameters,
+    extract_form_inputs,
+    invoked_function,
+)
 
 
 def _build_capture_text(values: dict[str, str]) -> str:
     """Assemble a record_page_from_text-compatible labeled-text block from
-    the dialog's form values (see page_capture.parse_page_capture) — reuses
-    that tool's own parsing/validation rather than duplicating it here, so
-    the dialog and the conversational labeled-text workflow stay two front
-    ends over the exact same logic. Only url is guaranteed present; every
-    other line is included only if the consultant filled that field in.
+    one url-entry step's form values (see page_capture.parse_page_capture)
+    — reuses that tool's own parsing/validation rather than duplicating it
+    here, so the dialog and the conversational labeled-text workflow stay
+    two front ends over the exact same logic. Only url is guaranteed
+    present; every other line is included only if the consultant filled
+    that field in.
     """
     lines = [f"url: {values.get('url', '').strip()}"]
 
@@ -97,23 +107,15 @@ async def _fetch_mcp_auth_headers(mcp_server_url: str) -> dict[str, str] | None:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def handle_dialog_submission(values: dict[str, str], *, mcp_server_url: str) -> dict[str, Any]:
-    """Process a submitted page-update dialog: find or start the
-    client/month session, then record the page through
-    record_page_from_text — deterministically, with no LLM in this path at
-    all (mirrors seo-testing-agent's review_plan_against_live_site calling
-    its MCP server directly rather than through the agent's tool-calling
-    loop). Returns a Cards v2 dialog action-status response, ready to
-    return as-is from the /chat webhook.
+async def _record_one_page(client: str, month: str, url: str, text: str, mcp_server_url: str) -> tuple[bool, str]:
+    """Find or start the client/month session, then record one page
+    through record_page_from_text — deterministically, with no LLM in this
+    path at all (mirrors seo-testing-agent's review_plan_against_live_site
+    calling its MCP server directly rather than through the agent's
+    tool-calling loop). Returns (ok, message) rather than raising, since
+    every caller needs to turn the result into a dialog response either
+    way.
     """
-    missing = [name for name in REQUIRED_FIELDS if not values.get(name, "").strip()]
-    if missing:
-        return dialog_error(f"Missing required field(s): {', '.join(missing)}")
-
-    client = values["client"].strip()
-    month = values["month"].strip()
-    url = values["url"].strip()
-    text = _build_capture_text(values)
     headers = await _fetch_mcp_auth_headers(mcp_server_url)
 
     try:
@@ -125,7 +127,7 @@ async def handle_dialog_submission(values: dict[str, str], *, mcp_server_url: st
                 if find_result.isError:
                     start_result = await session.call_tool("start_session", {"client": client, "month": month})
                     if start_result.isError:
-                        return dialog_error(f"Couldn't start a session: {_error_text(start_result)}")
+                        return False, f"Couldn't start a session: {_error_text(start_result)}"
                     session_id = _extract_result(start_result)["session_id"]
                 else:
                     session_id = _extract_result(find_result)["session_id"]
@@ -134,16 +136,60 @@ async def handle_dialog_submission(values: dict[str, str], *, mcp_server_url: st
                     "record_page_from_text", {"session_id": session_id, "text": text}
                 )
                 if record_result.isError:
-                    return dialog_error(f"Couldn't record the update: {_error_text(record_result)}")
+                    return False, f"Couldn't record {url}: {_error_text(record_result)}"
 
                 page = _extract_result(record_result)
     except Exception as exc:
-        return dialog_error(f"Couldn't reach the workbook service: {exc}")
+        return False, f"Couldn't reach the workbook service: {exc}"
 
     failed = [
         tp.get("touchpoint_id") for tp in page.get("touchpoints", [])
         if not (tp.get("validation") or {}).get("passed", True)
     ]
     if failed:
-        return dialog_ok(f"Recorded {url} for {client} ({month}) — but needs attention: {', '.join(failed)}")
-    return dialog_ok(f"Recorded {url} for {client} ({month}).")
+        return True, f"Recorded {url} — but needs attention: {', '.join(failed)}"
+    return True, f"Recorded {url}."
+
+
+async def dispatch_dialog_submission(event: dict[str, Any], *, mcp_server_url: str) -> dict[str, Any]:
+    """Single entry point for every CARD_CLICKED/SUBMIT_DIALOG event in the
+    page-update dialog flow — routes on which button was clicked
+    (invoked_function) to the matching step handler and returns the next
+    Cards v2 dialog response, ready to return as-is from the /chat webhook.
+    """
+    function = invoked_function(event)
+
+    if function == "startPageEntry":
+        values = extract_form_inputs(event)
+        missing = [name for name in REQUIRED_CLIENT_MONTH_FIELDS if not values.get(name, "").strip()]
+        if missing:
+            return dialog_error(f"Missing required field(s): {', '.join(missing)}")
+        return build_url_entry_dialog(values["client"].strip(), values["month"].strip(), count=1)
+
+    if function in ("saveAndContinue", "saveAndFinish"):
+        parameters = extract_button_parameters(event)
+        client = parameters.get("client", "").strip()
+        month = parameters.get("month", "").strip()
+        try:
+            count = int(parameters.get("count", "1"))
+        except ValueError:
+            count = 1
+        if not client or not month:
+            return dialog_error("Lost track of the client/month partway through — please start over.")
+
+        values = extract_form_inputs(event)
+        missing = [name for name in REQUIRED_URL_FIELDS if not values.get(name, "").strip()]
+        if missing:
+            return dialog_error(f"Missing required field(s): {', '.join(missing)}")
+
+        url = values["url"].strip()
+        text = _build_capture_text(values)
+        ok, message = await _record_one_page(client, month, url, text, mcp_server_url)
+        if not ok:
+            return dialog_error(message)
+
+        if function == "saveAndFinish":
+            return dialog_ok(f"{message} All done for {client} ({month}).")
+        return build_url_entry_dialog(client, month, count=count + 1, last_saved_url=url)
+
+    return dialog_error("Unexpected dialog action.")

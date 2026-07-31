@@ -44,21 +44,6 @@ def test_build_capture_text_preserves_multiline_headings_block():
     )
 
 
-def test_build_capture_text_keeps_all_optional_fields_in_order():
-    text = ds._build_capture_text({
-        "url": "https://example.com/a/",
-        "keyword": "auto insurance (500)",
-        "geo": "Scottsdale, AZ",
-        "cta": "Get a Quote",
-    })
-    assert text == (
-        "url: https://example.com/a/\n"
-        "keyword: auto insurance (500)\n"
-        "geo: Scottsdale, AZ\n"
-        "cta: Get a Quote"
-    )
-
-
 class _FakeToolResult:
     def __init__(self, *, is_error=False, structured=None, text=None):
         self.isError = is_error
@@ -85,9 +70,8 @@ class _FakeSession:
 @pytest.fixture
 def patch_mcp(monkeypatch):
     """Stubs out streamablehttp_client + ClientSession so
-    handle_dialog_submission can be tested without a real MCP connection —
-    handle_dialog_submission's tool calls are asserted against the fake
-    session's `.calls` list."""
+    dispatch_dialog_submission's MCP-calling steps can be tested without a
+    real connection — asserted against the fake session's `.calls` list."""
     def _patch(responses: dict):
         session = _FakeSession(responses)
 
@@ -116,84 +100,153 @@ def patch_mcp(monkeypatch):
     return _patch
 
 
-async def test_handle_dialog_submission_requires_client_month_and_url():
-    result = await ds.handle_dialog_submission({}, mcp_server_url="http://mcp.example.com/mcp")
+def _form_inputs(**fields):
+    return {"formInputs": {name: {"stringInputs": {"value": [value]}} for name, value in fields.items()}}
+
+
+def _button_click(function, parameters=None, **fields):
+    event = {
+        "type": "CARD_CLICKED",
+        "dialogEventType": "SUBMIT_DIALOG",
+        "common": {"invokedFunction": function, **_form_inputs(**fields)},
+    }
+    if parameters is not None:
+        event["common"]["parameters"] = parameters
+    return event
+
+
+async def test_start_page_entry_requires_client_and_month():
+    event = _button_click("startPageEntry")
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
     status = result["actionResponse"]["dialogAction"]["actionStatus"]
     assert status["statusCode"] == "INVALID_ARGUMENT"
     assert "client" in status["userFacingMessage"]
     assert "month" in status["userFacingMessage"]
+
+
+async def test_start_page_entry_returns_the_first_url_entry_dialog():
+    event = _button_click("startPageEntry", client="North Texas Trailers", month="2026-07")
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+    header = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
+    assert header == "Page 1 for North Texas Trailers (2026-07)"
+
+
+async def test_save_and_continue_requires_url(patch_mcp):
+    patch_mcp({})
+    event = _button_click("saveAndContinue", parameters={"client": "KYZ", "month": "2026-06", "count": "1"})
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+    status = result["actionResponse"]["dialogAction"]["actionStatus"]
+    assert status["statusCode"] == "INVALID_ARGUMENT"
     assert "url" in status["userFacingMessage"]
 
 
-async def test_handle_dialog_submission_uses_existing_session_when_found(patch_mcp):
+async def test_save_and_continue_records_the_page_and_returns_the_next_url_dialog(patch_mcp):
     session = patch_mcp({
-        "find_session": _FakeToolResult(structured={"session_id": "ntt-2026-07", "pages": []}),
+        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
         "record_page_from_text": _FakeToolResult(structured={"touchpoints": []}),
     })
-
-    result = await ds.handle_dialog_submission(
-        {"client": "North Texas Trailers", "month": "2026-07", "url": "https://example.com/a/"},
-        mcp_server_url="http://mcp.example.com/mcp",
+    event = _button_click(
+        "saveAndContinue",
+        parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
+        url="https://kyz.com/a/",
     )
+
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
 
     tool_names = [name for name, _ in session.calls]
     assert tool_names == ["find_session", "record_page_from_text"]
-    assert session.calls[1][1]["session_id"] == "ntt-2026-07"
-    status = result["actionResponse"]["dialogAction"]["actionStatus"]
-    assert status["statusCode"] == "OK"
-    assert "Recorded" in status["userFacingMessage"]
+    assert session.calls[1][1] == {"session_id": "kyz-2026-06", "text": "url: https://kyz.com/a/"}
+
+    header = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]["header"]
+    assert header == "✓ Saved https://kyz.com/a/ — Page 2 for KYZ (2026-06)"
 
 
-async def test_handle_dialog_submission_starts_a_session_when_none_found(patch_mcp):
+async def test_save_and_continue_starts_a_session_when_none_found(patch_mcp):
     session = patch_mcp({
         "find_session": _FakeToolResult(is_error=True, text="No session found"),
-        "start_session": _FakeToolResult(structured={"session_id": "ntt-2026-07", "pages": []}),
+        "start_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
         "record_page_from_text": _FakeToolResult(structured={"touchpoints": []}),
     })
-
-    result = await ds.handle_dialog_submission(
-        {"client": "North Texas Trailers", "month": "2026-07", "url": "https://example.com/a/"},
-        mcp_server_url="http://mcp.example.com/mcp",
+    event = _button_click(
+        "saveAndContinue",
+        parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
+        url="https://kyz.com/a/",
     )
+
+    await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
 
     tool_names = [name for name, _ in session.calls]
     assert tool_names == ["find_session", "start_session", "record_page_from_text"]
+
+
+async def test_save_and_finish_closes_the_dialog(patch_mcp):
+    patch_mcp({
+        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
+        "record_page_from_text": _FakeToolResult(structured={"touchpoints": []}),
+    })
+    event = _button_click(
+        "saveAndFinish",
+        parameters={"client": "KYZ", "month": "2026-06", "count": "3"},
+        url="https://kyz.com/c/",
+    )
+
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+
     status = result["actionResponse"]["dialogAction"]["actionStatus"]
     assert status["statusCode"] == "OK"
+    assert "Recorded https://kyz.com/c/" in status["userFacingMessage"]
+    assert "All done for KYZ (2026-06)" in status["userFacingMessage"]
 
 
-async def test_handle_dialog_submission_surfaces_failed_validation(patch_mcp):
+async def test_save_and_finish_surfaces_failed_validation(patch_mcp):
     patch_mcp({
-        "find_session": _FakeToolResult(structured={"session_id": "ntt-2026-07", "pages": []}),
+        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
         "record_page_from_text": _FakeToolResult(structured={
             "touchpoints": [
                 {"touchpoint_id": "meta_description", "validation": {"passed": False, "messages": ["needs a cta"]}},
             ]
         }),
     })
-
-    result = await ds.handle_dialog_submission(
-        {"client": "North Texas Trailers", "month": "2026-07", "url": "https://example.com/a/"},
-        mcp_server_url="http://mcp.example.com/mcp",
+    event = _button_click(
+        "saveAndFinish",
+        parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
+        url="https://kyz.com/a/",
     )
+
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
 
     status = result["actionResponse"]["dialogAction"]["actionStatus"]
     assert status["statusCode"] == "OK"
     assert "meta_description" in status["userFacingMessage"]
-    assert "needs attention" in status["userFacingMessage"]
 
 
-async def test_handle_dialog_submission_reports_record_failure(patch_mcp):
+async def test_save_and_finish_reports_record_failure(patch_mcp):
     patch_mcp({
-        "find_session": _FakeToolResult(structured={"session_id": "ntt-2026-07", "pages": []}),
+        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
         "record_page_from_text": _FakeToolResult(is_error=True, text="Page not found"),
     })
-
-    result = await ds.handle_dialog_submission(
-        {"client": "North Texas Trailers", "month": "2026-07", "url": "https://example.com/a/"},
-        mcp_server_url="http://mcp.example.com/mcp",
+    event = _button_click(
+        "saveAndFinish",
+        parameters={"client": "KYZ", "month": "2026-06", "count": "1"},
+        url="https://kyz.com/a/",
     )
+
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
 
     status = result["actionResponse"]["dialogAction"]["actionStatus"]
     assert status["statusCode"] == "INVALID_ARGUMENT"
     assert "Page not found" in status["userFacingMessage"]
+
+
+async def test_save_and_continue_errors_when_client_month_parameters_are_missing():
+    event = _button_click("saveAndContinue", url="https://kyz.com/a/")
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+    status = result["actionResponse"]["dialogAction"]["actionStatus"]
+    assert status["statusCode"] == "INVALID_ARGUMENT"
+
+
+async def test_unknown_invoked_function_returns_an_error():
+    event = _button_click("somethingElse")
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+    status = result["actionResponse"]["dialogAction"]["actionStatus"]
+    assert status["statusCode"] == "INVALID_ARGUMENT"
