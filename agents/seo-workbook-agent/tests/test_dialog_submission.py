@@ -233,6 +233,35 @@ async def test_save_and_continue_records_the_page_using_fetched_old_values(patch
     assert text_input_names == ["url"]
 
 
+async def test_save_and_continue_ignores_a_stale_failure_on_an_untouched_touchpoint(patch_mcp):
+    # record_page_from_text's response includes the page's *entire*
+    # touchpoint history, not just what this call touched. A prior,
+    # unrelated attempt on this same page once saved a meta_description
+    # that failed validation (e.g. missing a CTA) — that stale failure
+    # must not block progress on a save that never mentions meta at all.
+    patch_mcp({
+        "find_session": _FakeToolResult(structured={"session_id": "kyz-2026-06", "pages": []}),
+        "record_page_from_text": _FakeToolResult(structured={
+            "touchpoints": [
+                {"touchpoint_id": "title_tag", "validation": {"passed": True, "messages": []}},
+                {"touchpoint_id": "meta_description", "validation": {"passed": False, "messages": ["cta is required"]}},
+            ]
+        }),
+    })
+    event = _button_click(
+        "saveAndContinue",
+        parameters={"client": "KYZ", "month": "2026-06", "url": "https://kyz.com/a/", "count": "1"},
+        title_new="New Title",
+    )
+
+    result = await ds.dispatch_dialog_submission(event, mcp_server_url="http://mcp.example.com/mcp")
+
+    # Advances to the next url-only step — not blocked by the stale
+    # meta_description failure this submission never touched.
+    dialog = result["actionResponse"]["dialogAction"]["dialog"]["body"]["sections"][0]
+    assert dialog["header"] == "✓ Saved https://kyz.com/a/ — Page 2 for KYZ (2026-06)"
+
+
 async def test_save_and_continue_starts_a_session_when_none_found(patch_mcp):
     session = patch_mcp({
         "find_session": _FakeToolResult(is_error=True, text="No session found"),

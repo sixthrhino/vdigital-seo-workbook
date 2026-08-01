@@ -115,8 +115,29 @@ async def _fetch_mcp_auth_headers(mcp_server_url: str) -> dict[str, str] | None:
     return {"Authorization": f"Bearer {token}"}
 
 
+# Which capture-text field, if present, causes record_page_from_text to
+# touch which touchpoint_id — used to scope validation_failures below to
+# *this* submission only. Keyword/geo/cta aren't separate touchpoints
+# (keyword/geo set page-level fields; cta rides inside meta_description's
+# own item) so they're not included.
+_TOUCHPOINT_FOR_FIELD = {
+    "title_new": "title_tag",
+    "meta_new": "meta_description",
+    "h1_new": "h1_tag",
+    "headings": "h2_h3_h4_tags",
+    "notes": "optimizations",
+}
+
+
+def _touched_touchpoint_ids(values: dict[str, str]) -> set[str]:
+    return {
+        touchpoint_id for field, touchpoint_id in _TOUCHPOINT_FOR_FIELD.items()
+        if values.get(field, "").strip()
+    }
+
+
 async def _record_one_page(
-    client: str, month: str, url: str, text: str, mcp_server_url: str
+    client: str, month: str, url: str, text: str, touched_touchpoint_ids: set[str], mcp_server_url: str
 ) -> tuple[bool, str, list[str]]:
     """Find or start the client/month session, then record one page
     through record_page_from_text — deterministically, with no LLM in this
@@ -133,6 +154,14 @@ async def _record_one_page(
       messages (not just which touchpoint_id), one per failed check, so
       the caller can show the specialist exactly what to fix rather than
       just naming the touchpoint.
+
+    record_page_from_text's response includes the page's *entire*
+    touchpoint history, not just what this call touched — confirmed live:
+    a stale failure from an earlier, unrelated attempt on the same page
+    (e.g. a meta_description once saved without a CTA) kept reappearing
+    on every later save of that page, even when that save never mentioned
+    meta at all. validation_failures is filtered down to
+    touched_touchpoint_ids for exactly this reason.
     """
     headers = await _fetch_mcp_auth_headers(mcp_server_url)
 
@@ -163,7 +192,8 @@ async def _record_one_page(
     validation_failures = [
         f"{tp.get('touchpoint_id')}: {msg}"
         for tp in page.get("touchpoints", [])
-        if not (tp.get("validation") or {}).get("passed", True)
+        if tp.get("touchpoint_id") in touched_touchpoint_ids
+        and not (tp.get("validation") or {}).get("passed", True)
         for msg in (tp.get("validation") or {}).get("messages", [])
     ]
     return True, f"Recorded {url}.", validation_failures
@@ -233,7 +263,8 @@ async def dispatch_dialog_submission(event: dict[str, Any], *, mcp_server_url: s
         current_values = _current_values_from_parameters(parameters)
         values = extract_form_inputs(event)
         text = _build_capture_text(url, values, current_values)
-        ok, message, validation_failures = await _record_one_page(client, month, url, text, mcp_server_url)
+        touched = _touched_touchpoint_ids(values)
+        ok, message, validation_failures = await _record_one_page(client, month, url, text, touched, mcp_server_url)
         if not ok:
             return dialog_error(message)
 
