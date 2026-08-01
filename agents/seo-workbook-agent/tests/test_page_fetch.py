@@ -53,6 +53,47 @@ async def test_fetch_current_page_values_returns_empty_on_timeout():
     assert result == {"title": "", "meta_description": "", "h1": ""}
 
 
+@respx.mock
+async def test_fetch_current_page_values_retries_with_the_next_profile_on_403(monkeypatch):
+    # Confirmed live: a real client site (behind bot-mitigation) rejected
+    # the first header profile with a 403 but let an otherwise-identical
+    # request through with the second profile.
+    monkeypatch.setattr("seo_workbook_agent.page_fetch._RETRY_DELAY_SECONDS", 0)
+    respx.get("https://example.com/a/").mock(
+        side_effect=[httpx.Response(403), httpx.Response(200, text=_HTML)]
+    )
+    result = await fetch_current_page_values("https://example.com/a/")
+    assert result == {
+        "title": "Existing Title Tag",
+        "meta_description": "Existing meta description.",
+        "h1": "Existing H1",
+    }
+
+
+@respx.mock
+async def test_fetch_current_page_values_retries_when_the_first_response_looks_bot_gated(monkeypatch):
+    # A stripped bot-mitigation page can still come back as a plain 200 —
+    # confirmed live via seo-testing-mcp's identical _looks_suspicious
+    # signature (zero title/meta/H1 despite substantial body text).
+    monkeypatch.setattr("seo_workbook_agent.page_fetch._RETRY_DELAY_SECONDS", 0)
+    stripped_page = "<html><body>" + ("word " * 150) + "</body></html>"
+    respx.get("https://example.com/a/").mock(
+        side_effect=[httpx.Response(200, text=stripped_page), httpx.Response(200, text=_HTML)]
+    )
+    result = await fetch_current_page_values("https://example.com/a/")
+    assert result["title"] == "Existing Title Tag"
+
+
+@respx.mock
+async def test_fetch_current_page_values_gives_up_after_every_profile_fails(monkeypatch):
+    monkeypatch.setattr("seo_workbook_agent.page_fetch._RETRY_DELAY_SECONDS", 0)
+    respx.get("https://example.com/a/").mock(
+        side_effect=[httpx.Response(403), httpx.Response(403)]
+    )
+    result = await fetch_current_page_values("https://example.com/a/")
+    assert result == {"title": "", "meta_description": "", "h1": ""}
+
+
 async def test_fetch_current_page_values_returns_empty_for_an_unsafe_url():
     result = await fetch_current_page_values("http://169.254.169.254/latest/meta-data/")
     assert result == {"title": "", "meta_description": "", "h1": ""}
